@@ -13,6 +13,7 @@ class LeadSource(str, Enum):
     SEC_EDGAR = "sec_edgar"
     TAX_ASSESSOR = "tax_assessor"
     PROFESSIONAL_MAPPING = "professional_mapping"
+    FEC_CAMPAIGN_FINANCE = "fec_campaign_finance"
     MANUAL = "manual"
 
 
