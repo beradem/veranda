@@ -21,6 +21,7 @@ from src.engines.real_estate import fetch_properties, NEIGHBORHOOD_ZIP_CODES
 from src.engines.outreach_generator import generate_outreach_for_lead, parse_lead_criteria, _get_llm_key
 from src.engines.professional_mapping import generate_search_links
 from src.engines.sec_edgar import fetch_insider_sales, configure_edgar
+from src.engines.fec import fetch_fec_donors
 from src.utils.pdf_extractor import extract_text_from_pdf
 from src.models.lead import Lead, LeadSource
 
@@ -179,6 +180,13 @@ if generate_btn:
             except Exception as sec_exc:
                 logger.warning("SEC EDGAR fetch failed: %s", sec_exc)
 
+            # Phase 4: FEC campaign finance donors
+            try:
+                fec_leads = fetch_fec_donors(min_donation=2_500.0, lookback_days=180, max_results=100)
+                leads = leads + fec_leads
+            except Exception as fec_exc:
+                logger.warning("FEC fetch failed: %s", fec_exc)
+
             leads = _deduplicate_leads(leads)
             st.session_state["leads"] = leads
             st.session_state["service_description"] = service_description.strip()
@@ -238,7 +246,7 @@ if st.session_state.get("search_done"):
                     maps_link = ""
 
             # Build enriched data string — property details for real estate
-            # leads, professional/sale details for SEC insider leads
+            # leads, professional/sale details for SEC insider and FEC leads
             info_parts = []
             if lead.source == LeadSource.SEC_EDGAR:
                 if lead.professional_title:
@@ -247,6 +255,16 @@ if st.session_state.get("search_done"):
                     info_parts.append(lead.company)
                 if lead.estimated_wealth:
                     info_parts.append(f"Insider sale ${lead.estimated_wealth:,.0f}")
+                info_parts.append(lead.discovery_trigger)
+            elif lead.source == LeadSource.FEC_CAMPAIGN_FINANCE:
+                if lead.professional_title:
+                    info_parts.append(lead.professional_title)
+                if lead.company:
+                    info_parts.append(lead.company)
+                if lead.city and lead.state:
+                    info_parts.append(f"{lead.city}, {lead.state}")
+                if lead.estimated_wealth:
+                    info_parts.append(f"Donated ${lead.estimated_wealth:,.0f}")
                 info_parts.append(lead.discovery_trigger)
             else:
                 if lead.address:
@@ -349,6 +367,18 @@ if st.session_state.get("search_done"):
                         if lead.estimated_wealth:
                             st.markdown(f"**Insider Sale:** ${lead.estimated_wealth:,.0f}")
                         st.markdown(f"**Trigger:** {lead.discovery_trigger}")
+                    elif lead.source == LeadSource.FEC_CAMPAIGN_FINANCE:
+                        if lead.professional_title:
+                            st.markdown(f"**Occupation:** {lead.professional_title}")
+                        if lead.company:
+                            st.markdown(f"**Employer:** {lead.company}")
+                        if lead.city and lead.state:
+                            st.markdown(f"**Location:** {lead.city}, {lead.state}")
+                        if lead.zip_code:
+                            st.markdown(f"**Zip:** {lead.zip_code}")
+                        if lead.estimated_wealth:
+                            st.markdown(f"**Donation:** ${lead.estimated_wealth:,.0f}")
+                        st.markdown(f"**Trigger:** {lead.discovery_trigger}")
                     else:
                         if lead.address:
                             st.markdown(f"**Address:** {lead.address}")
@@ -373,7 +403,7 @@ if st.session_state.get("search_done"):
 
                 with detail_col2:
                     st.markdown(f"**Est. Value:** {value_str}")
-                    if lead.source != LeadSource.SEC_EDGAR:
+                    if lead.source not in (LeadSource.SEC_EDGAR, LeadSource.FEC_CAMPAIGN_FINANCE):
                         st.markdown(f"**Trigger:** {lead.discovery_trigger}")
 
                     # Outreach: show if already generated, otherwise show button
