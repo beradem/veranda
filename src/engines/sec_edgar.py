@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_IDENTITY = "Veranda App contact@veranda.com"
 
 # Default: only surface sales above this dollar amount
-DEFAULT_MIN_SALE_VALUE = 1_000_000.0
+DEFAULT_MIN_SALE_VALUE = 100_000.0
 
 # Default lookback window in days
 DEFAULT_LOOKBACK_DAYS = 30

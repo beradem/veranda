@@ -20,8 +20,9 @@ import pandas as pd
 from src.engines.real_estate import fetch_properties, NEIGHBORHOOD_ZIP_CODES
 from src.engines.outreach_generator import generate_outreach_for_lead, parse_lead_criteria, _get_llm_key
 from src.engines.professional_mapping import generate_search_links
+from src.engines.sec_edgar import fetch_insider_sales, configure_edgar
 from src.utils.pdf_extractor import extract_text_from_pdf
-from src.models.lead import Lead
+from src.models.lead import Lead, LeadSource
 
 # Configure logging so we can see what the engines are doing
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
@@ -139,10 +140,9 @@ if generate_btn:
             for name in selected_neighborhoods:
                 zip_codes.extend(NEIGHBORHOOD_ZIP_CODES.get(name, []))
 
-            # Phase 2: PLUTO house search
+            # Phase 2: PLUTO house search + SEC insider sales
             with st.spinner(
-                f"Searching NYC PLUTO for properties over "
-                f"${min_market_value:,.0f}..."
+                f"Searching NYC properties and SEC insider sales..."
             ):
                 progress_cb = None
                 if include_condos:
@@ -170,6 +170,14 @@ if generate_btn:
             if include_condos:
                 acris_bar.empty()
                 acris_status.empty()
+
+            # Phase 3: SEC EDGAR insider sales
+            try:
+                configure_edgar()
+                sec_leads = fetch_insider_sales(lookback_days=30, max_filings=100)
+                leads = leads + sec_leads
+            except Exception as sec_exc:
+                logger.warning("SEC EDGAR fetch failed: %s", sec_exc)
 
             leads = _deduplicate_leads(leads)
             st.session_state["leads"] = leads
@@ -229,32 +237,42 @@ if st.session_state.get("search_done"):
                 else:
                     maps_link = ""
 
-            # Build a combined residential info string
+            # Build enriched data string — property details for real estate
+            # leads, professional/sale details for SEC insider leads
             info_parts = []
-            if lead.address:
-                addr = lead.address
-                if lead.unit_number:
-                    addr += f", Unit {lead.unit_number}"
-                info_parts.append(addr)
-            if lead.building_type:
-                info_parts.append(lead.building_type)
-            if lead.year_built:
-                info_parts.append(f"Built {lead.year_built}")
-            if lead.building_area:
-                info_parts.append(f"{lead.building_area:,} sq ft")
-            if lead.num_floors:
-                info_parts.append(f"{lead.num_floors} floors")
-            if lead.estimated_wealth:
-                info_parts.append(f"Est. ${lead.estimated_wealth:,.0f}")
-            if lead.deed_sale_amount:
-                sale_str = f"Last sale ${lead.deed_sale_amount:,.0f}"
-                if lead.deed_date:
-                    sale_str += f" ({lead.deed_date})"
-                info_parts.append(sale_str)
+            if lead.source == LeadSource.SEC_EDGAR:
+                if lead.professional_title:
+                    info_parts.append(lead.professional_title)
+                if lead.company:
+                    info_parts.append(lead.company)
+                if lead.estimated_wealth:
+                    info_parts.append(f"Insider sale ${lead.estimated_wealth:,.0f}")
+                info_parts.append(lead.discovery_trigger)
+            else:
+                if lead.address:
+                    addr = lead.address
+                    if lead.unit_number:
+                        addr += f", Unit {lead.unit_number}"
+                    info_parts.append(addr)
+                if lead.building_type:
+                    info_parts.append(lead.building_type)
+                if lead.year_built:
+                    info_parts.append(f"Built {lead.year_built}")
+                if lead.building_area:
+                    info_parts.append(f"{lead.building_area:,} sq ft")
+                if lead.num_floors:
+                    info_parts.append(f"{lead.num_floors} floors")
+                if lead.estimated_wealth:
+                    info_parts.append(f"Est. ${lead.estimated_wealth:,.0f}")
+                if lead.deed_sale_amount:
+                    sale_str = f"Last sale ${lead.deed_sale_amount:,.0f}"
+                    if lead.deed_date:
+                        sale_str += f" ({lead.deed_date})"
+                    info_parts.append(sale_str)
 
             row = {
                 "Name": owner_name,
-                "Residential Information": " · ".join(info_parts) if info_parts else "—",
+                "Enriched User Data": " · ".join(info_parts) if info_parts else "—",
                 "Map": maps_link,
                 "Google": google_link,
                 "LinkedIn": linkedin_link,
@@ -284,6 +302,7 @@ if st.session_state.get("search_done"):
         st.dataframe(
             filtered_df,
             column_config={
+                "Enriched User Data": st.column_config.TextColumn(),
                 "Map": st.column_config.LinkColumn(display_text="Map"),
                 "Google": st.column_config.LinkColumn(display_text="Search"),
                 "LinkedIn": st.column_config.LinkColumn(display_text="Search"),
@@ -322,30 +341,40 @@ if st.session_state.get("search_done"):
                 detail_col1, detail_col2 = st.columns(2)
 
                 with detail_col1:
-                    if lead.address:
-                        st.markdown(f"**Address:** {lead.address}")
-                    if lead.unit_number:
-                        st.markdown(f"**Unit:** {lead.unit_number}")
-                    if lead.building_type:
-                        st.markdown(f"**Type:** {lead.building_type}")
-                    if lead.year_built:
-                        st.markdown(f"**Year Built:** {lead.year_built}")
-                    if lead.building_area:
-                        st.markdown(f"**Building Size:** {lead.building_area:,} sq ft")
-                    if lead.lot_area:
-                        st.markdown(f"**Lot Size:** {lead.lot_area:,} sq ft")
-                    if lead.num_floors:
-                        st.markdown(f"**Floors:** {lead.num_floors}")
-                    if lead.zip_code:
-                        st.markdown(f"**Zip Code:** {lead.zip_code}")
-                    if lead.deed_sale_amount:
-                        st.markdown(f"**Last Sale Price:** ${lead.deed_sale_amount:,.0f}")
-                    if lead.deed_date:
-                        st.markdown(f"**Last Sale Date:** {lead.deed_date}")
+                    if lead.source == LeadSource.SEC_EDGAR:
+                        if lead.professional_title:
+                            st.markdown(f"**Title:** {lead.professional_title}")
+                        if lead.company:
+                            st.markdown(f"**Company:** {lead.company}")
+                        if lead.estimated_wealth:
+                            st.markdown(f"**Insider Sale:** ${lead.estimated_wealth:,.0f}")
+                        st.markdown(f"**Trigger:** {lead.discovery_trigger}")
+                    else:
+                        if lead.address:
+                            st.markdown(f"**Address:** {lead.address}")
+                        if lead.unit_number:
+                            st.markdown(f"**Unit:** {lead.unit_number}")
+                        if lead.building_type:
+                            st.markdown(f"**Type:** {lead.building_type}")
+                        if lead.year_built:
+                            st.markdown(f"**Year Built:** {lead.year_built}")
+                        if lead.building_area:
+                            st.markdown(f"**Building Size:** {lead.building_area:,} sq ft")
+                        if lead.lot_area:
+                            st.markdown(f"**Lot Size:** {lead.lot_area:,} sq ft")
+                        if lead.num_floors:
+                            st.markdown(f"**Floors:** {lead.num_floors}")
+                        if lead.zip_code:
+                            st.markdown(f"**Zip Code:** {lead.zip_code}")
+                        if lead.deed_sale_amount:
+                            st.markdown(f"**Last Sale Price:** ${lead.deed_sale_amount:,.0f}")
+                        if lead.deed_date:
+                            st.markdown(f"**Last Sale Date:** {lead.deed_date}")
 
                 with detail_col2:
                     st.markdown(f"**Est. Value:** {value_str}")
-                    st.markdown(f"**Trigger:** {lead.discovery_trigger}")
+                    if lead.source != LeadSource.SEC_EDGAR:
+                        st.markdown(f"**Trigger:** {lead.discovery_trigger}")
 
                     # Outreach: show if already generated, otherwise show button
                     if lead.outreach_draft:
