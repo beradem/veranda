@@ -41,7 +41,7 @@ st.set_page_config(
 st.markdown("""
 <style>
     /* Remove top padding and header */
-    .block-container { padding-top: 1rem !important; max-width: 720px !important; }
+    .block-container { padding-top: 1rem !important; max-width: 75% !important; }
     header[data-testid="stHeader"] { display: none !important; }
 
     /* File uploader — compact */
@@ -108,7 +108,7 @@ if not _get_llm_key():
     st.caption("Add GROQ_API_KEY to .env for AI-powered neighborhood selection")
 
 # Centered generate button (sits right under the text box)
-_, btn_col, _ = st.columns([1, 1, 1])
+_, btn_col, _ = st.columns([1, 2, 1])
 with btn_col:
     generate_btn = st.button(
         "Generate Leads",
