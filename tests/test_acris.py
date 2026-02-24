@@ -442,6 +442,7 @@ class TestProcessBlockGroup:
             bbl_zip_lookup={"1-01234": "10007"},
             bbl_address_lookup={"1-01234": "15 Central Park West"},
             bbl_value_lookup={"1-01234": 10_000_000.0},
+            bbl_units_lookup={},
             min_sale_value=0.0,
             limit_per_block=200,
         )
@@ -467,6 +468,7 @@ class TestProcessBlockGroup:
             bbl_zip_lookup={"1-01234": "10007"},
             bbl_address_lookup={"1-01234": "15 Central Park West"},
             bbl_value_lookup={"1-01234": 10_000_000.0},
+            bbl_units_lookup={},
             min_sale_value=5_000_000.0,
             limit_per_block=200,
         )
@@ -483,7 +485,7 @@ class TestProcessBlockGroup:
         leads = _process_block_group(
             client=mock_client, borough="1", blocks=["100"],
             bbl_zip_lookup={}, bbl_address_lookup={}, bbl_value_lookup={},
-            min_sale_value=0.0, limit_per_block=200,
+            bbl_units_lookup={}, min_sale_value=0.0, limit_per_block=200,
         )
 
         assert leads == []
@@ -505,7 +507,7 @@ class TestProcessBlockGroup:
             bbl_zip_lookup={"1-100": "10007"},
             bbl_address_lookup={"1-100": "100 Broadway"},
             bbl_value_lookup={"1-100": 5_000_000.0},
-            min_sale_value=0.0, limit_per_block=200,
+            bbl_units_lookup={}, min_sale_value=0.0, limit_per_block=200,
         )
 
         assert len(leads) == 0

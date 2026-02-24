@@ -31,3 +31,9 @@ htmlcov/
 # Output data
 output/
 *.csv
+
+# SQLite database files
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/sync.log

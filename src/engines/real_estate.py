@@ -466,7 +466,7 @@ def _get_condo_building_bbls(
     limit: int = 200,
     min_market_value: float = 1_000_000.0,
     individuals_only: bool = False,
-) -> tuple[list[tuple[str, str]], dict[str, str], dict[str, str], dict[str, float], list[Lead]]:
+) -> tuple[list[tuple[str, str]], dict[str, str], dict[str, str], dict[str, float], dict[str, int], list[Lead]]:
     """Query PLUTO for condo/co-op/apartment buildings and return BBL pairs + building owner leads.
 
     Condo and apartment buildings have building classes starting with R, C, D,
@@ -488,12 +488,14 @@ def _get_condo_building_bbls(
         - bbl_zip_lookup: Maps "borough-block" to zip code
         - bbl_address_lookup: Maps "borough-block" to building address
         - bbl_value_lookup: Maps "borough-block" to estimated market value
+        - bbl_units_lookup: Maps "borough-block" to total unit count
         - building_leads: Lead objects for building-level owners from PLUTO
     """
     borough_block_pairs: list[tuple[str, str]] = []
     bbl_zip_lookup: dict[str, str] = {}
     bbl_address_lookup: dict[str, str] = {}
     bbl_value_lookup: dict[str, float] = {}
+    bbl_units_lookup: dict[str, int] = {}
     building_leads: list[Lead] = []
     seen_blocks: set[str] = set()
 
@@ -509,7 +511,8 @@ def _get_condo_building_bbls(
                 where=where_clause,
                 select=(
                     "ownername,borough,block,lot,address,assesstot,"
-                    "bldgclass,zipcode,yearbuilt,lotarea,numfloors,bldgarea"
+                    "bldgclass,zipcode,yearbuilt,lotarea,numfloors,bldgarea,"
+                    "unitsres,unitstotal"
                 ),
                 limit=limit,
                 order="assesstot DESC",
@@ -541,6 +544,16 @@ def _get_condo_building_bbls(
                 market_value = _estimate_market_value(assessed_total, building_class)
                 bbl_value_lookup[bb_key] = market_value
 
+                # Store unit count so ACRIS can estimate per-unit value
+                try:
+                    unit_count = int(record.get("unitsres", 0) or 0)
+                    if unit_count == 0:
+                        unit_count = int(record.get("unitstotal", 0) or 0)
+                    if unit_count > 0:
+                        bbl_units_lookup[bb_key] = unit_count
+                except (ValueError, TypeError):
+                    pass
+
                 # Also process this building's owner as a lead directly.
                 # This catches people who own entire apartment buildings —
                 # high-value leads that ACRIS unit searches won't find.
@@ -568,7 +581,7 @@ def _get_condo_building_bbls(
         len(zip_codes),
     )
 
-    return borough_block_pairs, bbl_zip_lookup, bbl_address_lookup, bbl_value_lookup, building_leads
+    return borough_block_pairs, bbl_zip_lookup, bbl_address_lookup, bbl_value_lookup, bbl_units_lookup, building_leads
 
 
 def fetch_properties(
@@ -683,7 +696,7 @@ def fetch_properties(
 
         logger.info("Condo mode enabled — querying PLUTO for condo buildings...")
         try:
-            bb_pairs, zip_lookup, addr_lookup, val_lookup, bldg_leads = (
+            bb_pairs, zip_lookup, addr_lookup, val_lookup, units_lookup, bldg_leads = (
                 _get_condo_building_bbls(
                     zip_codes, client, limit,
                     min_market_value=min_market_value,
@@ -702,6 +715,7 @@ def fetch_properties(
                     bbl_zip_lookup=zip_lookup,
                     bbl_address_lookup=addr_lookup,
                     bbl_value_lookup=val_lookup,
+                    bbl_units_lookup=units_lookup,
                     min_sale_value=min_market_value,
                     limit_per_block=limit,
                     app_token=app_token,

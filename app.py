@@ -13,6 +13,7 @@ Single-page layout:
 import sys
 import logging
 import math
+from datetime import datetime
 
 import streamlit as st
 import pandas as pd
@@ -24,6 +25,7 @@ from src.engines.sec_edgar import fetch_insider_sales, configure_edgar
 from src.engines.fec import fetch_fec_donors
 from src.utils.pdf_extractor import extract_text_from_pdf
 from src.models.lead import Lead, LeadSource
+from src.db import get_connection, init_db, save_leads, query_leads, get_lead_count, get_last_sync, update_outreach, _make_name_key
 
 # Configure logging so we can see what the engines are doing
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
@@ -56,6 +58,25 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("Veranda")
+
+# --- Database connection (cached so it's reused across reruns) ---
+@st.cache_resource
+def _get_db():
+    conn = get_connection()
+    init_db(conn)
+    return conn
+
+_db = _get_db()
+
+# Show last sync timestamp
+_last_sync = get_last_sync(_db)
+if _last_sync:
+    try:
+        _sync_dt = datetime.fromisoformat(_last_sync).strftime("%b %d, %Y")
+    except ValueError:
+        _sync_dt = _last_sync
+    _db_count = get_lead_count(_db)
+    st.caption(f"Last synced: {_sync_dt} · {_db_count:,} leads in database")
 
 
 # =========================================================================
@@ -107,14 +128,17 @@ if uploaded_pdf is not None:
 if not _get_llm_key():
     st.caption("Add GROQ_API_KEY to .env for AI-powered neighborhood selection")
 
-# Centered generate button (sits right under the text box)
-_, btn_col, _ = st.columns([1, 2, 1])
-with btn_col:
-    generate_btn = st.button(
-        "Generate Leads",
-        type="primary",
-        key="generate_btn",
-    )
+# Centered generate button
+st.markdown(
+    "<div style='display:flex; justify-content:center;'>",
+    unsafe_allow_html=True,
+)
+generate_btn = st.button(
+    "Generate Leads",
+    type="primary",
+    key="generate_btn",
+)
+st.markdown("</div>", unsafe_allow_html=True)
 
 if generate_btn:
     if not service_description.strip():
@@ -141,53 +165,72 @@ if generate_btn:
             for name in selected_neighborhoods:
                 zip_codes.extend(NEIGHBORHOOD_ZIP_CODES.get(name, []))
 
-            # Phase 2: PLUTO house search + SEC insider sales
-            with st.spinner(
-                f"Searching NYC properties and SEC insider sales..."
-            ):
-                progress_cb = None
-                if include_condos:
-                    acris_status = st.empty()
-                    acris_bar = st.progress(0, text="Preparing condo search...")
+            # Check if DB has leads — if so, query instantly instead of live API calls
+            db_count = get_lead_count(_db)
 
-                    def progress_cb(completed: int, total: int) -> None:
-                        pct = completed / total if total > 0 else 0
-                        acris_bar.progress(
-                            pct,
-                            text=f"Scanning condo deed records... ({completed}/{total} building groups)",
-                        )
-
-                leads = fetch_properties(
-                    zip_codes=zip_codes,
-                    min_market_value=min_market_value,
-                    limit=50_000,
+            if db_count > 0:
+                leads = query_leads(
+                    _db,
+                    zip_codes=zip_codes if zip_codes else None,
+                    min_value=min_market_value,
                     residential_only=residential_only,
                     individuals_only=individuals_only,
-                    include_condos=include_condos,
-                    progress_callback=progress_cb,
                 )
+            else:
+                # Fall back to live API calls
+                with st.spinner(
+                    f"Searching NYC properties and SEC insider sales..."
+                ):
+                    progress_cb = None
+                    if include_condos:
+                        acris_status = st.empty()
+                        acris_bar = st.progress(0, text="Preparing condo search...")
 
-            # Clean up progress bar
-            if include_condos:
-                acris_bar.empty()
-                acris_status.empty()
+                        def progress_cb(completed: int, total: int) -> None:
+                            pct = completed / total if total > 0 else 0
+                            acris_bar.progress(
+                                pct,
+                                text=f"Scanning condo deed records... ({completed}/{total} building groups)",
+                            )
 
-            # Phase 3: SEC EDGAR insider sales
-            try:
-                configure_edgar()
-                sec_leads = fetch_insider_sales(lookback_days=30, max_filings=1_000)
-                leads = leads + sec_leads
-            except Exception as sec_exc:
-                logger.warning("SEC EDGAR fetch failed: %s", sec_exc)
+                    leads = fetch_properties(
+                        zip_codes=zip_codes,
+                        min_market_value=min_market_value,
+                        limit=50_000,
+                        residential_only=residential_only,
+                        individuals_only=individuals_only,
+                        include_condos=include_condos,
+                        progress_callback=progress_cb,
+                    )
 
-            # Phase 4: FEC campaign finance donors
-            try:
-                fec_leads = fetch_fec_donors(min_donation=2_500.0, lookback_days=180, max_results=0)
-                leads = leads + fec_leads
-            except Exception as fec_exc:
-                logger.warning("FEC fetch failed: %s", fec_exc)
+                # Clean up progress bar
+                if include_condos:
+                    acris_bar.empty()
+                    acris_status.empty()
 
-            leads = _deduplicate_leads(leads)
+                # SEC EDGAR insider sales
+                try:
+                    configure_edgar()
+                    sec_leads = fetch_insider_sales(lookback_days=30, max_filings=1_000)
+                    leads = leads + sec_leads
+                except Exception as sec_exc:
+                    logger.warning("SEC EDGAR fetch failed: %s", sec_exc)
+
+                # FEC campaign finance donors
+                try:
+                    fec_leads = fetch_fec_donors(min_donation=2_500.0, lookback_days=180, max_results=0)
+                    leads = leads + fec_leads
+                except Exception as fec_exc:
+                    logger.warning("FEC fetch failed: %s", fec_exc)
+
+                leads = _deduplicate_leads(leads)
+
+                # Save live results to DB for next time
+                try:
+                    save_leads(_db, leads)
+                except Exception as db_exc:
+                    logger.warning("Failed to save leads to DB: %s", db_exc)
+
             st.session_state["leads"] = leads
             st.session_state["service_description"] = service_description.strip()
             st.session_state["search_done"] = True
@@ -430,6 +473,9 @@ if st.session_state.get("search_done"):
                                     svc_desc,
                                 )
                             if lead.outreach_draft:
+                                # Persist outreach to DB
+                                name_key = _make_name_key(lead.first_name, lead.last_name)
+                                update_outreach(_db, name_key, "draft_ready", lead.outreach_draft)
                                 st.markdown("**Outreach Message:**")
                                 st.text_area(
                                     "outreach",

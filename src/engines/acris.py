@@ -292,6 +292,7 @@ def _build_acris_lead(
     zip_code: str,
     building_address: str = "",
     assessed_value: float = 0.0,
+    building_units: int = 0,
 ) -> Optional[Lead]:
     """Convert ACRIS records into a Lead object.
 
@@ -306,6 +307,8 @@ def _build_acris_lead(
         zip_code: Zip code of the building (from PLUTO).
         building_address: Street address of the building (from PLUTO).
         assessed_value: PLUTO assessed market value (fallback for $0 deeds).
+        building_units: Number of residential units in the building (from PLUTO).
+                       Used to estimate per-unit value when deed amount is $0.
 
     Returns:
         A Lead object, or None if the record should be skipped.
@@ -324,8 +327,14 @@ def _build_acris_lead(
     except (ValueError, TypeError):
         pass
 
-    # Use sale amount if available, otherwise PLUTO assessed value
-    wealth_value = sale_amount if sale_amount > 0 else assessed_value
+    # Use sale amount if available, otherwise estimate per-unit value
+    # by dividing the building's total assessed value by unit count.
+    if sale_amount > 0:
+        wealth_value = sale_amount
+    elif building_units > 0:
+        wealth_value = assessed_value / building_units
+    else:
+        wealth_value = assessed_value
 
     # Skip if both sale amount and assessed value are $0
     if wealth_value <= 0:
@@ -396,6 +405,7 @@ def _process_block_group(
     bbl_zip_lookup: dict[str, str],
     bbl_address_lookup: dict[str, str],
     bbl_value_lookup: dict[str, float],
+    bbl_units_lookup: dict[str, int],
     min_sale_value: float,
     limit_per_block: int,
 ) -> list[Lead]:
@@ -411,6 +421,7 @@ def _process_block_group(
         bbl_zip_lookup: Maps "borough-block" to zip code.
         bbl_address_lookup: Maps "borough-block" to building address.
         bbl_value_lookup: Maps "borough-block" to assessed market value.
+        bbl_units_lookup: Maps "borough-block" to total unit count.
         min_sale_value: Minimum value threshold for leads.
         limit_per_block: Max leads per block.
 
@@ -472,6 +483,7 @@ def _process_block_group(
         zip_code = bbl_zip_lookup.get(bb_key, "")
         building_address = bbl_address_lookup.get(bb_key, "")
         assessed_value = bbl_value_lookup.get(bb_key, 0.0)
+        building_units = bbl_units_lookup.get(bb_key, 0)
 
         for party in unit_parties:
             lead = _build_acris_lead(
@@ -481,6 +493,7 @@ def _process_block_group(
                 zip_code=zip_code,
                 building_address=building_address,
                 assessed_value=assessed_value,
+                building_units=building_units,
             )
             if lead is None:
                 continue
@@ -499,6 +512,7 @@ def fetch_condo_unit_owners(
     bbl_zip_lookup: dict[str, str],
     bbl_address_lookup: dict[str, str],
     bbl_value_lookup: dict[str, float],
+    bbl_units_lookup: Optional[dict[str, int]] = None,
     min_sale_value: float = 0.0,
     limit_per_block: int = 200,
     app_token: Optional[str] = None,
@@ -520,6 +534,8 @@ def fetch_condo_unit_owners(
         bbl_zip_lookup: Maps "borough-block" to zip code.
         bbl_address_lookup: Maps "borough-block" to building street address.
         bbl_value_lookup: Maps "borough-block" to PLUTO assessed market value.
+        bbl_units_lookup: Maps "borough-block" to total unit count. Used to
+                         estimate per-unit value when deed amount is $0.
         min_sale_value: Minimum deed sale amount to qualify (default $0 = all).
         limit_per_block: Max leads per block.
         app_token: Optional Socrata app token.
@@ -529,6 +545,8 @@ def fetch_condo_unit_owners(
     Returns:
         List of Lead objects for individual condo unit owners.
     """
+    if bbl_units_lookup is None:
+        bbl_units_lookup = {}
     logger.info(
         "ACRIS scan starting | blocks=%d | min_sale=$%s",
         len(borough_block_pairs),
@@ -571,6 +589,7 @@ def fetch_condo_unit_owners(
                 bbl_zip_lookup=bbl_zip_lookup,
                 bbl_address_lookup=bbl_address_lookup,
                 bbl_value_lookup=bbl_value_lookup,
+                bbl_units_lookup=bbl_units_lookup,
                 min_sale_value=min_sale_value,
                 limit_per_block=limit_per_block,
             )
