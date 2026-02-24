@@ -160,7 +160,7 @@ if generate_btn:
                 leads = fetch_properties(
                     zip_codes=zip_codes,
                     min_market_value=min_market_value,
-                    limit=200,
+                    limit=50_000,
                     residential_only=residential_only,
                     individuals_only=individuals_only,
                     include_condos=include_condos,
@@ -175,14 +175,14 @@ if generate_btn:
             # Phase 3: SEC EDGAR insider sales
             try:
                 configure_edgar()
-                sec_leads = fetch_insider_sales(lookback_days=30, max_filings=100)
+                sec_leads = fetch_insider_sales(lookback_days=30, max_filings=1_000)
                 leads = leads + sec_leads
             except Exception as sec_exc:
                 logger.warning("SEC EDGAR fetch failed: %s", sec_exc)
 
             # Phase 4: FEC campaign finance donors
             try:
-                fec_leads = fetch_fec_donors(min_donation=2_500.0, lookback_days=180, max_results=100)
+                fec_leads = fetch_fec_donors(min_donation=2_500.0, lookback_days=180, max_results=0)
                 leads = leads + fec_leads
             except Exception as fec_exc:
                 logger.warning("FEC fetch failed: %s", fec_exc)

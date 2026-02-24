@@ -153,6 +153,8 @@ def fetch_fec_donors(
         state or "ALL",
     )
 
+    unlimited = max_results <= 0
+
     params: dict = {
         "api_key": api_key,
         "min_amount": min_donation,
@@ -160,45 +162,64 @@ def fetch_fec_donors(
         "max_date": max_date,
         "is_individual": "true",
         "sort": "-contribution_receipt_amount",
-        "per_page": min(max_results, MAX_PER_PAGE),
+        "per_page": MAX_PER_PAGE,
     }
     if state:
         params["contributor_state"] = state.upper()
 
-    try:
-        response = httpx.get(
-            f"{FEC_API_BASE}/schedules/schedule_a/",
-            params=params,
-            timeout=30.0,
-        )
-        response.raise_for_status()
-    except httpx.HTTPStatusError as exc:
-        logger.error("FEC API HTTP error: %s", exc)
-        return []
-    except httpx.RequestError as exc:
-        logger.error("FEC API request failed: %s", exc)
-        return []
-
-    data = response.json()
-    results = data.get("results", [])
-
-    logger.info("FEC API returned %d raw records", len(results))
-
     leads: list[Lead] = []
     errors = 0
+    total_fetched = 0
 
-    for record in results[:max_results]:
+    while True:
         try:
-            lead = _process_single_record(record)
-            if lead is not None:
-                leads.append(lead)
-        except Exception as exc:
-            errors += 1
-            logger.warning("Failed to parse FEC record: %s | %s", record.get("contributor_name"), exc)
+            response = httpx.get(
+                f"{FEC_API_BASE}/schedules/schedule_a/",
+                params=params,
+                timeout=30.0,
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            logger.error("FEC API HTTP error: %s", exc)
+            break
+        except httpx.RequestError as exc:
+            logger.error("FEC API request failed: %s", exc)
+            break
+
+        data = response.json()
+        results = data.get("results", [])
+        total_fetched += len(results)
+
+        logger.info("FEC API returned %d records (total so far: %d)", len(results), total_fetched)
+
+        for record in results:
+            if not unlimited and len(leads) >= max_results:
+                break
+            try:
+                lead = _process_single_record(record)
+                if lead is not None:
+                    leads.append(lead)
+            except Exception as exc:
+                errors += 1
+                logger.warning("Failed to parse FEC record: %s | %s", record.get("contributor_name"), exc)
+
+        # Stop if we've hit the requested limit
+        if not unlimited and len(leads) >= max_results:
+            break
+
+        # Follow pagination cursor if more pages exist
+        pagination = data.get("pagination", {})
+        last_indexes = pagination.get("last_indexes")
+        if not last_indexes or not results:
+            break
+
+        # Add cursor params for next page
+        for key, value in last_indexes.items():
+            params[key] = value
 
     logger.info(
-        "FEC scan complete | records_processed=%d | leads_found=%d | errors=%d",
-        len(results),
+        "FEC scan complete | records_fetched=%d | leads_found=%d | errors=%d",
+        total_fetched,
         len(leads),
         errors,
     )
