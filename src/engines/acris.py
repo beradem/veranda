@@ -467,6 +467,19 @@ def _process_block_group(
         if doc_id:
             parties_by_doc.setdefault(doc_id, []).append(party)
 
+    # Count units per block directly from ACRIS deed records.
+    # unit_key format is "borough-block-lot-unit", so split on "-" to get block.
+    # This is used as a fallback when PLUTO's unitsres/unitstotal fields are
+    # missing or zero — which is common for large condo buildings stored as a
+    # single lot in PLUTO. Using the ACRIS count prevents the full building
+    # value from being assigned to each individual unit.
+    acris_units_per_block: dict[str, int] = {}
+    for unit_key in unit_owners:
+        parts = unit_key.split("-")
+        if len(parts) >= 3:
+            blk = parts[1]
+            acris_units_per_block[blk] = acris_units_per_block.get(blk, 0) + 1
+
     # Step 5: Build leads, tracking count per block
     block_lead_counts: dict[str, int] = {}
 
@@ -483,7 +496,9 @@ def _process_block_group(
         zip_code = bbl_zip_lookup.get(bb_key, "")
         building_address = bbl_address_lookup.get(bb_key, "")
         assessed_value = bbl_value_lookup.get(bb_key, 0.0)
-        building_units = bbl_units_lookup.get(bb_key, 0)
+        # Prefer PLUTO's unit count; fall back to the count of unique units
+        # found in ACRIS for this block.
+        building_units = bbl_units_lookup.get(bb_key, 0) or acris_units_per_block.get(block, 0)
 
         for party in unit_parties:
             lead = _build_acris_lead(

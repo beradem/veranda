@@ -332,6 +332,20 @@ def complete_sync_log(
     conn.commit()
 
 
+def clear_leads(conn: sqlite3.Connection) -> int:
+    """Delete all rows from the leads table.
+
+    Use this to force a fresh live pull next time Generate Leads is clicked.
+
+    Returns:
+        Number of rows deleted.
+    """
+    cursor = conn.execute("DELETE FROM leads")
+    conn.commit()
+    logger.info("Cleared %d leads from database", cursor.rowcount)
+    return cursor.rowcount
+
+
 def update_outreach(
     conn: sqlite3.Connection,
     name_key: str,

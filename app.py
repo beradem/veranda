@@ -68,7 +68,7 @@ def _get_db():
 
 _db = _get_db()
 
-# Show last sync timestamp
+# Show last sync timestamp + option to clear cached data
 _last_sync = get_last_sync(_db)
 if _last_sync:
     try:
