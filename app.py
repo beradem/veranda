@@ -51,36 +51,38 @@ st.markdown("""
     [data-testid="stFileUploader"] section {
         padding: 0 !important;
     }
-    [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] {
+    [data-testid="stFileUploaderDropzone"] {
         padding: 0 !important;
         min-height: 0 !important;
         background: transparent !important;
         border: none !important;
     }
-    [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzoneInstructions"] {
+    [data-testid="stFileUploaderDropzoneInstructions"] {
         display: none !important;
     }
     [data-testid="stFileUploader"] small {
         display: none !important;
     }
-    [data-testid="stFileUploader"] section > button {
+    [data-testid="stFileUploaderDropzone"] button {
         background: none !important;
         border: none !important;
         box-shadow: none !important;
         padding: 0 !important;
         min-height: 0 !important;
         height: auto !important;
+        overflow: visible !important;
         margin-top: -0.75rem !important;
     }
-    [data-testid="stFileUploader"] section > button p {
+    [data-testid="stFileUploaderDropzone"] button p {
         display: none !important;
     }
-    [data-testid="stFileUploader"] section > button::after {
+    [data-testid="stFileUploaderDropzone"] button::after {
         content: "upload a file describing your services";
         color: rgba(49, 51, 63, 0.6);
         font-size: 0.875rem;
         text-decoration: underline;
         cursor: pointer;
+        display: inline-block;
     }
 </style>
 """, unsafe_allow_html=True)
