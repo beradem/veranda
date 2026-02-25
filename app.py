@@ -17,6 +17,7 @@ import math
 from datetime import datetime
 
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 
 from src.engines.real_estate import fetch_properties, NEIGHBORHOOD_ZIP_CODES
@@ -47,42 +48,11 @@ st.markdown("""
     .block-container { padding-top: 1rem !important; max-width: 75% !important; }
     header[data-testid="stHeader"] { display: none !important; }
 
-    /* File uploader — disguised as underlined text trigger */
-    [data-testid="stFileUploader"] section {
-        padding: 0 !important;
-    }
-    [data-testid="stFileUploaderDropzone"] {
-        padding: 0 !important;
-        min-height: 0 !important;
-        background: transparent !important;
-        border: none !important;
-    }
-    [data-testid="stFileUploaderDropzoneInstructions"] {
-        display: none !important;
-    }
-    [data-testid="stFileUploader"] small {
-        display: none !important;
-    }
-    [data-testid="stFileUploaderDropzone"] button {
-        background: none !important;
-        border: none !important;
-        box-shadow: none !important;
-        padding: 0 !important;
-        min-height: 0 !important;
-        height: auto !important;
-        overflow: visible !important;
-        margin-top: -0.75rem !important;
-    }
-    [data-testid="stFileUploaderDropzone"] button p {
-        display: none !important;
-    }
-    [data-testid="stFileUploaderDropzone"] button::after {
-        content: "upload a file describing your services";
-        color: rgba(49, 51, 63, 0.6);
-        font-size: 0.875rem;
-        text-decoration: underline;
-        cursor: pointer;
-        display: inline-block;
+    /* File uploader — hidden off-screen; triggered via JS from the link above */
+    [data-testid="stFileUploader"] {
+        position: fixed !important;
+        left: -9999px !important;
+        top: -9999px !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -144,7 +114,35 @@ if st.query_params.get("browse_all") == "1":
 # =========================================================================
 st.header("Your Business")
 
-st.markdown("Tell us about your services and ideal customer, or")
+components.html(
+    """
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        font-family: "Source Sans Pro", sans-serif;
+        font-size: 14px;
+        color: rgba(49, 51, 63, 0.7);
+        line-height: 1.6;
+      }
+      a { color: inherit; text-decoration: underline; cursor: pointer; }
+      a:hover { color: rgba(49, 51, 63, 1); }
+    </style>
+    <p>Tell us about your services and ideal customer, or
+      <a href="#" id="upload-link">upload a file describing your services</a>
+    </p>
+    <script>
+      document.getElementById('upload-link').addEventListener('click', function(e) {
+        e.preventDefault();
+        var inp = window.parent.document.querySelector(
+          '[data-testid="stFileUploaderDropzone"] input[type="file"]'
+        );
+        if (inp) inp.click();
+      });
+    </script>
+    """,
+    height=25,
+    scrolling=False,
+)
 uploaded_pdf = st.file_uploader(
     "upload",
     type=["pdf"],
