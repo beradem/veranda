@@ -69,6 +69,10 @@ def sync_all() -> int:
                 seen_zips.add(z)
                 unique_zips.append(z)
 
+        def _sync_progress(completed: int, total: int) -> None:
+            if completed % 50 == 0 or completed == total:
+                logger.info("ACRIS progress: %d / %d block groups", completed, total)
+
         try:
             re_leads = fetch_properties(
                 zip_codes=unique_zips,
@@ -78,6 +82,7 @@ def sync_all() -> int:
                 individuals_only=False,
                 include_condos=True,
                 app_token=os.getenv("SOCRATA_APP_TOKEN"),
+                progress_callback=_sync_progress,
             )
             logger.info("Real Estate returned %d leads", len(re_leads))
             all_leads.extend(re_leads)
