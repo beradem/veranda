@@ -499,30 +499,17 @@ with st.sidebar:
         key="generate_btn",
     )
 
-    # ── Filters (visible after leads are loaded) ──────────────────────────────
-    _sidebar_leads: list[Lead] = st.session_state.get("leads", [])
+    # ── Neighborhood filter (always visible, all neighborhoods) ───────────────
+    st.markdown("<div style='height:1.25rem;'></div>", unsafe_allow_html=True)
+    st.markdown('<div class="section-label">Refine Results</div>', unsafe_allow_html=True)
 
-    if _sidebar_leads:
-        st.markdown("<div style='height:1.25rem;'></div>", unsafe_allow_html=True)
-        st.markdown('<div class="section-label">Refine Results</div>', unsafe_allow_html=True)
-
-        # Collect distinct values from the loaded lead corpus
-        _all_nbhds = sorted(
-            {_get_neighborhood(l) for l in _sidebar_leads if _get_neighborhood(l) != "Other"}
-        )
-
-        # Neighborhood
-        if _all_nbhds:
-            with st.expander("Neighborhood", expanded=True):
-                _sel_nbhds = [
-                    n for n in _all_nbhds[:24]
-                    if st.checkbox(n, value=True, key=f"nbhd_{n}")
-                ]
-                if not _sel_nbhds:
-                    _sel_nbhds = _all_nbhds
-            st.session_state["_f_nbhds"] = _sel_nbhds
-        else:
-            st.session_state["_f_nbhds"] = []
+    _all_nbhds = sorted(NEIGHBORHOOD_ZIP_CODES.keys())
+    with st.expander("Neighborhood", expanded=False):
+        _sel_nbhds = [
+            n for n in _all_nbhds
+            if st.checkbox(n, value=False, key=f"nbhd_{n}")
+        ]
+    st.session_state["_f_nbhds"] = _sel_nbhds
 
 
 # ─── GENERATE LEADS ───────────────────────────────────────────────────────────
@@ -748,7 +735,6 @@ else:
 
             rows.append(
                 {
-                    "#": start_idx + i + 1,
                     "Name": owner,
                     "Details": " · ".join(info_parts) if info_parts else "—",
                 }
@@ -759,7 +745,6 @@ else:
         table_event = st.dataframe(
             df,
             column_config={
-                "#": st.column_config.NumberColumn(width="small"),
                 "Name": st.column_config.TextColumn(width="medium"),
                 "Details": st.column_config.TextColumn(width="large"),
             },
