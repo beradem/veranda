@@ -101,7 +101,7 @@ def _deduplicate_leads(leads: list[Lead]) -> list[Lead]:
 # --- Browse-all shortcut: loads all DB leads when the lead-count link is clicked ---
 if st.query_params.get("browse_all") == "1":
     with st.spinner("Loading leads from database..."):
-        leads_all = query_leads(_db, max_value=50_000_000, limit=10_000)
+        leads_all = query_leads(_db, max_value=35_000_000, limit=10_000)
     st.session_state["leads"] = leads_all
     st.session_state["search_done"] = True
     st.session_state["current_page"] = 0
@@ -219,7 +219,7 @@ if generate_btn:
                     _db,
                     zip_codes=zip_codes if zip_codes else None,
                     min_value=min_market_value,
-                    max_value=50_000_000,
+                    max_value=35_000_000,
                     residential_only=residential_only,
                     individuals_only=individuals_only,
                 )
