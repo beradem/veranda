@@ -10,6 +10,7 @@ Single-page layout:
 4. Results — table + paginated expandable cards with outreach messages
 """
 
+import os
 import sys
 import logging
 import math
@@ -46,13 +47,34 @@ st.markdown("""
     .block-container { padding-top: 1rem !important; max-width: 75% !important; }
     header[data-testid="stHeader"] { display: none !important; }
 
-    /* File uploader — compact */
-    [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] {
-        padding: 8px 12px !important;
-        min-height: 0 !important;
+    /* File uploader — tiny icon-only button */
+    [data-testid="stFileUploader"] {
+        width: auto !important;
+        display: inline-block !important;
     }
-    [data-testid="stFileUploader"] .stFileUploaderDropzoneInstructions div:last-child {
+    [data-testid="stFileUploader"] section {
+        padding: 0 !important;
+    }
+    [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzone"] {
+        padding: 0 !important;
+        min-height: 0 !important;
+        background: transparent !important;
+        border: none !important;
+    }
+    [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzoneInstructions"] {
         display: none !important;
+    }
+    [data-testid="stFileUploader"] small {
+        display: none !important;
+    }
+    [data-testid="stFileUploader"] section > button {
+        padding: 0 !important;
+        min-height: 0 !important;
+        line-height: 1 !important;
+    }
+    /* Remove gap between label column and upload column */
+    [data-testid="stHorizontalBlock"]:has([data-testid="stFileUploader"]) {
+        gap: 0 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -98,8 +120,19 @@ def _deduplicate_leads(leads: list[Lead]) -> list[Lead]:
 # =========================================================================
 st.header("Your Business")
 
+label_col, upload_col = st.columns([20, 1])
+with label_col:
+    st.markdown("Tell us about your services and ideal customer")
+with upload_col:
+    uploaded_pdf = st.file_uploader(
+        "upload",
+        type=["pdf"],
+        key="pdf_upload",
+        label_visibility="collapsed",
+    )
+
 service_description = st.text_area(
-    "Tell us about your services and ideal customer",
+    "Business description",
     height=150,
     placeholder=(
         "Example: We are a boutique interior design firm specializing in "
@@ -108,12 +141,6 @@ service_description = st.text_area(
         "Park Slope who want to modernize while preserving character."
     ),
     key="service_desc",
-)
-
-uploaded_pdf = st.file_uploader(
-    "upload",
-    type=["pdf"],
-    key="pdf_upload",
     label_visibility="collapsed",
 )
 
@@ -200,6 +227,7 @@ if generate_btn:
                         residential_only=residential_only,
                         individuals_only=individuals_only,
                         include_condos=include_condos,
+                        app_token=os.getenv("SOCRATA_APP_TOKEN"),
                         progress_callback=progress_cb,
                     )
 

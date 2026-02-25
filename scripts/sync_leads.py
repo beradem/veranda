@@ -18,6 +18,9 @@ import os
 # Add project root to path so imports work when run as a script
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from src.db import get_connection, init_db, save_leads, clear_leads, start_sync_log, complete_sync_log
 from src.engines.real_estate import fetch_properties, NEIGHBORHOOD_ZIP_CODES
 from src.engines.sec_edgar import fetch_insider_sales, configure_edgar
@@ -74,6 +77,7 @@ def sync_all() -> int:
                 residential_only=False,
                 individuals_only=False,
                 include_condos=True,
+                app_token=os.getenv("SOCRATA_APP_TOKEN"),
             )
             logger.info("Real Estate returned %d leads", len(re_leads))
             all_leads.extend(re_leads)
