@@ -269,6 +269,10 @@ def query_leads(
         conditions.append("estimated_wealth < ?")
         params.append(max_value)
 
+    # Exclude any lead whose first or last name contains a digit
+    conditions.append("first_name NOT GLOB '*[0-9]*'")
+    conditions.append("last_name NOT GLOB '*[0-9]*'")
+
     if residential_only:
         conditions.append("source = ?")
         params.append(LeadSource.TAX_ASSESSOR.value)
