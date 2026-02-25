@@ -18,7 +18,7 @@ import os
 # Add project root to path so imports work when run as a script
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.db import get_connection, init_db, save_leads, start_sync_log, complete_sync_log
+from src.db import get_connection, init_db, save_leads, clear_leads, start_sync_log, complete_sync_log
 from src.engines.real_estate import fetch_properties, NEIGHBORHOOD_ZIP_CODES
 from src.engines.sec_edgar import fetch_insider_sales, configure_edgar
 from src.engines.fec import fetch_fec_donors
@@ -40,6 +40,13 @@ def sync_all() -> int:
     """
     conn = get_connection()
     init_db(conn)
+
+    # Clear stale data before re-syncing. Without this, the dedup logic in
+    # save_leads() silently skips corrected values that are lower than what's
+    # already stored — e.g. a fixed $4.6M unit would never overwrite a
+    # previously cached $429M (full-building) value for the same person.
+    deleted = clear_leads(conn)
+    logger.info("Cleared %d stale leads before re-sync", deleted)
 
     sync_id = start_sync_log(conn, source="all")
     total_saved = 0
