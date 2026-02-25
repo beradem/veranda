@@ -98,7 +98,12 @@ if _last_sync:
     except ValueError:
         _sync_dt = _last_sync
     _db_count = get_lead_count(_db)
-    st.caption(f"Last synced: {_sync_dt} · {_db_count:,} leads in database")
+    st.markdown(
+        f"<p style='font-size:0.875em; color:rgba(49,51,63,0.6);'>Last synced: {_sync_dt} · "
+        f"<a href='?browse_all=1' style='color:inherit; text-decoration:underline;'>"
+        f"{_db_count:,} leads in database</a></p>",
+        unsafe_allow_html=True,
+    )
 
 
 # =========================================================================
@@ -113,6 +118,16 @@ def _deduplicate_leads(leads: list[Lead]) -> list[Lead]:
         if existing is None or (lead.estimated_wealth or 0) > (existing.estimated_wealth or 0):
             seen[name_key] = lead
     return list(seen.values())
+
+
+# --- Browse-all shortcut: clicking the lead count loads everything instantly ---
+if st.query_params.get("browse_all") == "1":
+    del st.query_params["browse_all"]
+    st.session_state["leads"] = query_leads(_db)
+    st.session_state["search_done"] = True
+    st.session_state["current_page"] = 0
+    st.session_state.pop("service_description", None)
+    st.rerun()
 
 
 # =========================================================================
