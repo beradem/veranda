@@ -98,41 +98,12 @@ if _last_sync:
     except ValueError:
         _sync_dt = _last_sync
     _db_count = get_lead_count(_db)
-    # Scoped CSS: target only the button that immediately follows the sentinel span.
-    # The :has(#browse-sentinel) selector identifies the markdown sibling so we
-    # don't accidentally restyle other buttons on the page.
     st.markdown(
-        f"""<style>
-        [data-testid="stMarkdown"]:has(#browse-sentinel) + [data-testid="stButton"] > button {{
-            background: none !important;
-            border: none !important;
-            color: rgba(49,51,63,0.6) !important;
-            text-decoration: underline !important;
-            font-size: 0.875rem !important;
-            padding: 0 !important;
-            min-height: 0 !important;
-            line-height: 1.5 !important;
-            box-shadow: none !important;
-            cursor: pointer !important;
-            font-weight: 400 !important;
-            margin-top: -1rem !important;
-        }}
-        [data-testid="stMarkdown"]:has(#browse-sentinel) + [data-testid="stButton"] > button:hover {{
-            border: none !important;
-            color: rgba(49,51,63,1) !important;
-            background: none !important;
-        }}
-        </style>
-        <p style="font-size:0.875rem; color:rgba(49,51,63,0.6); margin-bottom:0;">
-            Last synced: {_sync_dt} ·<span id="browse-sentinel"></span>
-        </p>""",
+        f"<p style='font-size:0.875rem; color:rgba(49,51,63,0.6);'>Last synced: {_sync_dt} · "
+        f"<a href='?browse_all=1' target='_self' style='color:inherit; text-decoration:underline;'>"
+        f"{_db_count:,} leads in database</a></p>",
         unsafe_allow_html=True,
     )
-    if st.button(f"{_db_count:,} leads in database", key="browse_all_btn"):
-        st.session_state["leads"] = query_leads(_db)
-        st.session_state["search_done"] = True
-        st.session_state["current_page"] = 0
-        st.rerun()
 
 
 # =========================================================================
@@ -147,6 +118,15 @@ def _deduplicate_leads(leads: list[Lead]) -> list[Lead]:
         if existing is None or (lead.estimated_wealth or 0) > (existing.estimated_wealth or 0):
             seen[name_key] = lead
     return list(seen.values())
+
+
+# --- Browse-all shortcut: loads all DB leads when the lead-count link is clicked ---
+if st.query_params.get("browse_all") == "1":
+    del st.query_params["browse_all"]
+    st.session_state["leads"] = query_leads(_db)
+    st.session_state["search_done"] = True
+    st.session_state["current_page"] = 0
+    st.rerun()
 
 
 # =========================================================================
