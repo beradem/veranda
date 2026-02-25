@@ -122,10 +122,12 @@ def _deduplicate_leads(leads: list[Lead]) -> list[Lead]:
 
 # --- Browse-all shortcut: loads all DB leads when the lead-count link is clicked ---
 if st.query_params.get("browse_all") == "1":
-    del st.query_params["browse_all"]
-    st.session_state["leads"] = query_leads(_db)
+    with st.spinner("Loading leads from database..."):
+        leads_all = query_leads(_db, limit=10_000)
+    st.session_state["leads"] = leads_all
     st.session_state["search_done"] = True
     st.session_state["current_page"] = 0
+    del st.query_params["browse_all"]
     st.rerun()
 
 
