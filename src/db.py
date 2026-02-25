@@ -234,6 +234,7 @@ def query_leads(
     conn: sqlite3.Connection,
     zip_codes: Optional[list[str]] = None,
     min_value: float = 0,
+    max_value: Optional[float] = None,
     residential_only: bool = False,
     individuals_only: bool = False,
     limit: Optional[int] = None,
@@ -244,6 +245,7 @@ def query_leads(
         conn: Database connection.
         zip_codes: If provided, only return leads in these zip codes.
         min_value: Minimum estimated_wealth threshold.
+        max_value: Maximum estimated_wealth threshold (exclusive).
         residential_only: If True, only return tax_assessor leads.
         individuals_only: If True, exclude leads with empty first_name (LLCs).
         limit: Maximum number of rows to return (applied at SQL level).
@@ -262,6 +264,10 @@ def query_leads(
     if min_value > 0:
         conditions.append("estimated_wealth >= ?")
         params.append(min_value)
+
+    if max_value is not None:
+        conditions.append("estimated_wealth < ?")
+        params.append(max_value)
 
     if residential_only:
         conditions.append("source = ?")
