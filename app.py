@@ -77,7 +77,7 @@ if _last_sync:
         _sync_dt = _last_sync
     _db_count = get_lead_count(_db)
     st.markdown(
-        f"<p style='font-size:0.875rem; color:rgba(49,51,63,0.6);'>Last synced: {_sync_dt} · {_db_count:,} leads in database · "
+        f"<p style='font-size:14px; font-family:\"Source Sans Pro\", sans-serif; color:rgba(49,51,63,0.7);'>Last synced: {_sync_dt} · {_db_count:,} leads in database · "
         f"<a href='?browse_all=1' target='_self' style='color:inherit; text-decoration:underline;'>"
         f"Look at 10k sample leads</a></p>",
         unsafe_allow_html=True,
