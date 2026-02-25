@@ -1,13 +1,12 @@
-"""Veranda — NYC Luxury Service Lead Generator.
+"""Veranda — NYC Luxury Service Lead Command Center.
 
-A Streamlit dashboard that finds high-value NYC property owners from public
-records and generates personalized outreach messages using Google Gemini.
+A Streamlit command center with a master-detail layout for identifying
+and engaging high-net-worth leads through public wealth signals.
 
-Single-page layout:
-1. Business Profile — describe your service and ideal client
-2. Lead Criteria — pick neighborhoods, set value filters
-3. Generate Leads — fetch properties, deduplicate, generate outreach
-4. Results — table + paginated expandable cards with outreach messages
+Layout:
+  Left Sidebar  — Business profile input + collapsible NYC filters
+  Center Gallery — Selectable lead table (Bloomberg-style)
+  Right Drawer   — Detail panel that slides in on row click
 """
 
 import os
@@ -15,183 +14,574 @@ import sys
 import logging
 import math
 from datetime import datetime
+from urllib.parse import quote_plus
 
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
 
 from src.engines.real_estate import fetch_properties, NEIGHBORHOOD_ZIP_CODES
-from src.engines.outreach_generator import generate_outreach_for_lead, parse_lead_criteria, _get_llm_key
+from src.engines.outreach_generator import (
+    generate_outreach_for_lead,
+    parse_lead_criteria,
+    _get_llm_key,
+)
 from src.engines.professional_mapping import generate_search_links
 from src.engines.sec_edgar import fetch_insider_sales, configure_edgar
 from src.engines.fec import fetch_fec_donors
 from src.utils.pdf_extractor import extract_text_from_pdf
 from src.models.lead import Lead, LeadSource
-from src.db import get_connection, init_db, save_leads, query_leads, get_lead_count, get_last_sync, update_outreach, _make_name_key
+from src.db import (
+    get_connection,
+    init_db,
+    save_leads,
+    query_leads,
+    get_lead_count,
+    get_last_sync,
+    update_outreach,
+    _make_name_key,
+)
 
-# Configure logging so we can see what the engines are doing
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
+logger = logging.getLogger(__name__)
 
-LEADS_PER_PAGE = 20
+LEADS_PER_PAGE = 100
 
-# --- Page Config ---
+# ── Reverse-map ZIP → Neighborhood ───────────────────────────────────────────
+ZIP_TO_NEIGHBORHOOD: dict[str, str] = {}
+for _nbhd, _zips in NEIGHBORHOOD_ZIP_CODES.items():
+    for _z in _zips:
+        ZIP_TO_NEIGHBORHOOD[_z] = _nbhd
+
+# ─── PAGE CONFIG ──────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Veranda",
     page_icon="🏡",
     layout="wide",
 )
 
-# --- Minimal black & white theme + centered layout ---
-st.markdown("""
+# ─── LUXURY THEME ─────────────────────────────────────────────────────────────
+st.markdown(
+    """
 <style>
-    /* Remove top padding and header */
-    .block-container { padding-top: 1rem !important; max-width: 75% !important; }
-    header[data-testid="stHeader"] { display: none !important; }
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=Inter:wght@300;400;500;600&display=swap');
 
-    /* File uploader — hidden off-screen; triggered via JS from the link above */
-    [data-testid="stFileUploader"] {
-        position: fixed !important;
-        left: -9999px !important;
-        top: -9999px !important;
-    }
+/* ── Palette ─────────────────────────────────────────────────────────────── */
+:root {
+  --bg:           #0C0C0F;
+  --bg-sidebar:   #0F0F14;
+  --bg-card:      #16161C;
+  --bg-hover:     #1D1D26;
+  --gold:         #C8A96E;
+  --gold-dim:     #7A6535;
+  --gold-faint:   rgba(200,169,110,0.10);
+  --text:         #EDE8E0;
+  --text-dim:     #7A7570;
+  --border:       #252530;
+  --border-gold:  rgba(200,169,110,0.28);
+  --serif:        'Cormorant Garamond', Georgia, serif;
+  --sans:         'Inter', system-ui, sans-serif;
+}
+
+/* ── Base ─────────────────────────────────────────────────────────────────── */
+.stApp, body, html {
+  background-color: var(--bg) !important;
+  color: var(--text) !important;
+  font-family: var(--sans) !important;
+}
+header[data-testid="stHeader"] { display: none !important; }
+.block-container {
+  padding-top: 1.5rem !important;
+  padding-bottom: 4rem !important;
+  max-width: 100% !important;
+  padding-left: 2rem !important;
+  padding-right: 2rem !important;
+}
+
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+[data-testid="stSidebar"] {
+  background-color: var(--bg-sidebar) !important;
+  border-right: 1px solid var(--border) !important;
+}
+[data-testid="stSidebar"] > div {
+  background-color: var(--bg-sidebar) !important;
+}
+
+/* ── Typography ──────────────────────────────────────────────────────────── */
+h1, h2, h3 {
+  font-family: var(--serif) !important;
+  font-weight: 400 !important;
+  color: var(--text) !important;
+  letter-spacing: 0.02em !important;
+}
+p, li { font-family: var(--sans) !important; font-size: 13px !important; }
+label {
+  font-family: var(--sans) !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.1em !important;
+  text-transform: uppercase !important;
+  color: var(--text-dim) !important;
+}
+
+/* ── Inputs ──────────────────────────────────────────────────────────────── */
+.stTextInput input,
+.stTextArea textarea {
+  background-color: var(--bg-card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 3px !important;
+  color: var(--text) !important;
+  font-family: var(--sans) !important;
+  font-size: 13px !important;
+}
+.stTextInput input:focus,
+.stTextArea textarea:focus {
+  border-color: var(--gold-dim) !important;
+  box-shadow: 0 0 0 1px var(--gold-dim) !important;
+}
+input::placeholder, textarea::placeholder { color: var(--text-dim) !important; }
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+.stButton button {
+  font-family: var(--sans) !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.12em !important;
+  text-transform: uppercase !important;
+  border-radius: 3px !important;
+  transition: all 0.15s ease !important;
+}
+.stButton button[kind="primary"] {
+  background-color: var(--gold) !important;
+  color: #0C0C0F !important;
+  border: none !important;
+}
+.stButton button[kind="primary"]:hover { background-color: #D4B878 !important; }
+.stButton button[kind="secondary"] {
+  background-color: transparent !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-dim) !important;
+}
+.stButton button[kind="secondary"]:hover {
+  border-color: var(--gold-dim) !important;
+  color: var(--text) !important;
+}
+
+/* ── Metrics ─────────────────────────────────────────────────────────────── */
+[data-testid="stMetric"] {
+  background-color: var(--bg-card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 4px !important;
+  padding: 1rem 1.25rem !important;
+}
+[data-testid="stMetricValue"] {
+  font-family: var(--serif) !important;
+  font-size: 1.8rem !important;
+  color: var(--gold) !important;
+}
+[data-testid="stMetricLabel"] {
+  font-size: 10px !important;
+  letter-spacing: 0.1em !important;
+  text-transform: uppercase !important;
+  color: var(--text-dim) !important;
+}
+
+/* ── Expanders ───────────────────────────────────────────────────────────── */
+[data-testid="stExpander"] {
+  background-color: var(--bg-card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 4px !important;
+  margin-bottom: 0.4rem !important;
+}
+[data-testid="stExpander"] summary {
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.14em !important;
+  text-transform: uppercase !important;
+  color: var(--text-dim) !important;
+}
+
+/* ── Checkboxes / Sliders ────────────────────────────────────────────────── */
+.stCheckbox label span,
+.stRadio label span {
+  font-family: var(--sans) !important;
+  font-size: 12px !important;
+  color: var(--text-dim) !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
+  font-weight: 400 !important;
+}
+
+/* ── Dividers ────────────────────────────────────────────────────────────── */
+hr { border-color: var(--border) !important; margin: 1.25rem 0 !important; }
+
+/* ── Info / Warning / Error ──────────────────────────────────────────────── */
+[data-testid="stAlert"] {
+  background-color: var(--bg-card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 4px !important;
+  color: var(--text) !important;
+}
+
+/* ── Caption / small text ────────────────────────────────────────────────── */
+[data-testid="stCaptionContainer"] {
+  color: var(--text-dim) !important;
+  font-size: 11px !important;
+}
+
+/* ── File uploader — hidden, triggered by JS link ────────────────────────── */
+[data-testid="stFileUploader"] {
+  position: fixed !important;
+  left: -9999px !important;
+  top: -9999px !important;
+}
+
+/* ── Scrollbar ───────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ── Detail panel prose ──────────────────────────────────────────────────── */
+.detail-name {
+  font-family: var(--serif);
+  font-size: 1.75rem;
+  font-weight: 400;
+  color: var(--text);
+  line-height: 1.15;
+  margin-bottom: 0.2rem;
+}
+.detail-trigger {
+  font-size: 10px;
+  color: var(--gold);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 1.25rem;
+}
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.detail-label {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  margin-right: 1rem;
+  flex-shrink: 0;
+}
+.detail-value {
+  font-size: 13px;
+  color: var(--text);
+  font-family: var(--sans);
+  text-align: right;
+}
+.source-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 2px;
+  background: var(--gold-faint);
+  color: var(--gold);
+  border: 1px solid var(--border-gold);
+}
+.section-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold-dim);
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── Welcome hero ────────────────────────────────────────────────────────── */
+.welcome-hero { text-align: center; padding: 5rem 2rem; }
+.welcome-title {
+  font-family: var(--serif);
+  font-size: 4rem;
+  font-weight: 300;
+  color: var(--text);
+  letter-spacing: 0.06em;
+}
+.welcome-rule {
+  width: 40px;
+  height: 1px;
+  background: var(--gold);
+  margin: 1.75rem auto;
+}
+.welcome-sub {
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+.welcome-body {
+  font-size: 13px;
+  color: var(--text-dim);
+  max-width: 480px;
+  margin: 2rem auto 0;
+  line-height: 1.9;
+}
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
-st.title("Veranda")
-
-# --- Database connection (cached so it's reused across reruns) ---
+# ─── DATABASE ─────────────────────────────────────────────────────────────────
 @st.cache_resource
 def _get_db():
     conn = get_connection()
     init_db(conn)
     return conn
 
+
 _db = _get_db()
 
-# Show last sync timestamp + option to clear cached data
-_last_sync = get_last_sync(_db)
-if _last_sync:
-    try:
-        _sync_dt = datetime.fromisoformat(_last_sync).strftime("%b %d, %Y")
-    except ValueError:
-        _sync_dt = _last_sync
-    _db_count = get_lead_count(_db)
-    st.markdown(
-        f"<p style='font-size:14px; font-family:\"Source Sans Pro\", sans-serif; color:rgba(49,51,63,0.7);'>Last synced: {_sync_dt} · {_db_count:,} leads in database · "
-        f"<a href='?browse_all=1' target='_self' style='color:inherit; text-decoration:underline;'>"
-        f"Look at 10k sample leads</a></p>",
-        unsafe_allow_html=True,
-    )
 
-
-# =========================================================================
-# SHARED UTILITIES
-# =========================================================================
+# ─── UTILITIES ────────────────────────────────────────────────────────────────
 def _deduplicate_leads(leads: list[Lead]) -> list[Lead]:
-    """Remove duplicate leads, keeping the highest-value entry per person."""
+    """Keep highest-value entry per unique person."""
     seen: dict[str, Lead] = {}
     for lead in leads:
-        name_key = f"{lead.first_name}_{lead.last_name}".lower().strip("_")
-        existing = seen.get(name_key)
-        if existing is None or (lead.estimated_wealth or 0) > (existing.estimated_wealth or 0):
-            seen[name_key] = lead
+        key = f"{lead.first_name}_{lead.last_name}".lower().strip("_")
+        if key not in seen or (lead.estimated_wealth or 0) > (seen[key].estimated_wealth or 0):
+            seen[key] = lead
     return list(seen.values())
 
 
-# --- Browse-all shortcut: loads all DB leads when the lead-count link is clicked ---
+def _get_neighborhood(lead: Lead) -> str:
+    return ZIP_TO_NEIGHBORHOOD.get(lead.zip_code or "", "Other")
+
+
+def _fmt_value(value: float | None) -> str:
+    if value is None:
+        return "—"
+    if value >= 1_000_000:
+        return f"${value / 1_000_000:.1f}M"
+    if value >= 1_000:
+        return f"${value / 1_000:.0f}K"
+    return f"${value:,.0f}"
+
+
+def _source_label(source: LeadSource) -> str:
+    return {
+        LeadSource.TAX_ASSESSOR: "Property",
+        LeadSource.SEC_EDGAR: "Insider Sale",
+        LeadSource.FEC_CAMPAIGN_FINANCE: "Donor",
+        LeadSource.PROFESSIONAL_MAPPING: "Professional",
+        LeadSource.MANUAL: "Manual",
+    }.get(source, source.value)
+
+
+# ─── BROWSE-ALL SHORTCUT ──────────────────────────────────────────────────────
 if st.query_params.get("browse_all") == "1":
     with st.spinner("Loading leads from database..."):
         leads_all = query_leads(_db, max_value=35_000_000, limit=10_000)
     st.session_state["leads"] = leads_all
     st.session_state["search_done"] = True
     st.session_state["current_page"] = 0
+    st.session_state.pop("selected_lead_idx", None)
     del st.query_params["browse_all"]
     st.rerun()
 
 
-# =========================================================================
-# SECTION 1: YOUR BUSINESS
-# =========================================================================
-st.header("Your Business")
+# ─── SIDEBAR ──────────────────────────────────────────────────────────────────
+with st.sidebar:
+    # ── Brand mark ──
+    st.markdown(
+        """
+        <div style="padding: 1rem 0 1.5rem;">
+          <div style="font-family:'Cormorant Garamond',serif; font-size:1.55rem;
+                      font-weight:400; letter-spacing:0.1em; color:#EDE8E0;">
+            VERANDA
+          </div>
+          <div style="font-size:9px; letter-spacing:0.2em; text-transform:uppercase;
+                      color:#7A7570; margin-top:3px;">
+            NYC Intelligence Platform
+          </div>
+          <div style="height:1px; background:#252530; margin-top:1rem;"></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-components.html(
-    """
-    <style>
-      * { box-sizing: border-box; margin: 0; padding: 0; }
-      body {
-        font-family: "Source Sans Pro", sans-serif;
-        font-size: 14px;
-        color: rgba(49, 51, 63, 0.7);
-        line-height: 1.6;
-      }
-      a { color: inherit; text-decoration: underline; cursor: pointer; }
-      a:hover { color: rgba(49, 51, 63, 1); }
-    </style>
-    <p>Tell us about your services and ideal customer, or
-      <a href="#" id="upload-link">upload a file describing your services</a>
-    </p>
-    <script>
-      document.getElementById('upload-link').addEventListener('click', function(e) {
-        e.preventDefault();
-        var inp = window.parent.document.querySelector(
-          '[data-testid="stFileUploaderDropzone"] input[type="file"]'
-        );
-        if (inp) inp.click();
-      });
-    </script>
-    """,
-    height=25,
-    scrolling=False,
-)
-uploaded_pdf = st.file_uploader(
-    "upload",
-    type=["pdf"],
-    key="pdf_upload",
-    label_visibility="collapsed",
-)
+    # ── Status line ──
+    _last_sync = get_last_sync(_db)
+    _db_count = get_lead_count(_db)
+    if _last_sync:
+        try:
+            _sync_dt = datetime.fromisoformat(_last_sync).strftime("%b %d, %Y")
+        except ValueError:
+            _sync_dt = _last_sync
+        st.markdown(
+            f"<p style='font-size:11px; color:#7A7570; margin-bottom:1.25rem;'>"
+            f"{_db_count:,} leads · synced {_sync_dt} · "
+            f"<a href='?browse_all=1' style='color:#C8A96E; text-decoration:none;'>"
+            f"browse all</a></p>",
+            unsafe_allow_html=True,
+        )
 
-service_description = st.text_area(
-    "Business description",
-    height=150,
-    placeholder=(
-        "Example: We are a boutique interior design firm specializing in "
-        "pre-war brownstone renovations. Our ideal clients are owners of "
-        "historic homes valued at $3M+ in the West Village, Tribeca, and "
-        "Park Slope who want to modernize while preserving character."
-    ),
-    key="service_desc",
-    label_visibility="collapsed",
-)
+    # ── Business profile ──
+    st.markdown('<div class="section-label">Your Business</div>', unsafe_allow_html=True)
 
-if uploaded_pdf is not None:
-    extracted = extract_text_from_pdf(uploaded_pdf)
-    if extracted:
-        service_description = extracted
-        st.caption(f"Using text from PDF ({len(extracted):,} characters)")
-    else:
-        st.warning("Could not extract text from this PDF.")
+    components.html(
+        """
+        <style>
+          * { box-sizing:border-box; margin:0; padding:0; }
+          body {
+            font-family: 'Inter', sans-serif; font-size: 12px;
+            color: #7A7570; line-height: 1.55;
+          }
+          a { color: #C8A96E; text-decoration: none; }
+          a:hover { text-decoration: underline; }
+        </style>
+        <p>Describe your service, or
+          <a href="#" id="upload-link">upload a PDF</a>.
+        </p>
+        <script>
+          document.getElementById('upload-link').addEventListener('click', function(e) {
+            e.preventDefault();
+            var inp = window.parent.document.querySelector(
+              '[data-testid="stFileUploaderDropzone"] input[type="file"]'
+            );
+            if (inp) inp.click();
+          });
+        </script>
+        """,
+        height=22,
+        scrolling=False,
+    )
 
-if not _get_llm_key():
-    st.caption("Add GROQ_API_KEY to .env for AI-powered neighborhood selection")
+    uploaded_pdf = st.file_uploader(
+        "upload",
+        type=["pdf"],
+        key="pdf_upload",
+        label_visibility="collapsed",
+    )
 
-# Centered generate button
-st.markdown(
-    "<div style='display:flex; justify-content:center;'>",
-    unsafe_allow_html=True,
-)
-generate_btn = st.button(
-    "Generate Leads",
-    type="primary",
-    key="generate_btn",
-)
-st.markdown("</div>", unsafe_allow_html=True)
+    service_description = st.text_area(
+        "Business description",
+        height=120,
+        placeholder=(
+            "e.g. Boutique interior design firm specializing in pre-war "
+            "brownstone renovations. Ideal clients own $3M+ homes in the "
+            "West Village, Tribeca, or Park Slope."
+        ),
+        key="service_desc",
+        label_visibility="collapsed",
+    )
 
+    if uploaded_pdf is not None:
+        extracted = extract_text_from_pdf(uploaded_pdf)
+        if extracted:
+            service_description = extracted
+            st.caption(f"Using PDF · {len(extracted):,} characters")
+        else:
+            st.warning("Could not extract text from this PDF.")
+
+    if not _get_llm_key():
+        st.caption("Add GROQ_API_KEY for AI neighborhood selection")
+
+    generate_btn = st.button(
+        "Generate Leads",
+        type="primary",
+        use_container_width=True,
+        key="generate_btn",
+    )
+
+    # ── Filters (visible after leads are loaded) ──────────────────────────────
+    _sidebar_leads: list[Lead] = st.session_state.get("leads", [])
+
+    if _sidebar_leads:
+        st.markdown("<div style='height:1.25rem;'></div>", unsafe_allow_html=True)
+        st.markdown('<div class="section-label">Refine Results</div>', unsafe_allow_html=True)
+
+        # Collect distinct values from the loaded lead corpus
+        _all_nbhds = sorted(
+            {_get_neighborhood(l) for l in _sidebar_leads if _get_neighborhood(l) != "Other"}
+        )
+        _all_types = sorted(
+            {
+                l.building_type
+                for l in _sidebar_leads
+                if l.building_type
+                and l.source not in (LeadSource.SEC_EDGAR, LeadSource.FEC_CAMPAIGN_FINANCE)
+            }
+        )
+        _sale_vals = [l.deed_sale_amount for l in _sidebar_leads if l.deed_sale_amount]
+        _min_sale = int(min(_sale_vals)) if _sale_vals else 0
+        _max_sale = int(max(_sale_vals)) if _sale_vals else 10_000_000
+
+        # Neighborhood
+        if _all_nbhds:
+            with st.expander("Neighborhood", expanded=True):
+                _sel_nbhds = [
+                    n for n in _all_nbhds[:24]
+                    if st.checkbox(n, value=True, key=f"nbhd_{n}")
+                ]
+                if not _sel_nbhds:
+                    _sel_nbhds = _all_nbhds
+            st.session_state["_f_nbhds"] = _sel_nbhds
+        else:
+            st.session_state["_f_nbhds"] = []
+
+        # Property Type
+        if _all_types:
+            with st.expander("Property Type", expanded=False):
+                _sel_types = [
+                    t for t in _all_types[:18]
+                    if st.checkbox(t, value=True, key=f"ptype_{t}")
+                ]
+                if not _sel_types:
+                    _sel_types = _all_types
+            st.session_state["_f_types"] = _sel_types
+        else:
+            st.session_state["_f_types"] = []
+
+        # Last Sale Price
+        if _sale_vals and _min_sale < _max_sale:
+            with st.expander("Last Sale Price", expanded=False):
+                _price_range = st.slider(
+                    "Price range",
+                    min_value=_min_sale,
+                    max_value=_max_sale,
+                    value=(_min_sale, _max_sale),
+                    format="$%d",
+                    key="price_slider",
+                    label_visibility="collapsed",
+                )
+            st.session_state["_f_price"] = _price_range
+        else:
+            st.session_state["_f_price"] = (_min_sale, _max_sale)
+
+        # Data Source
+        with st.expander("Data Source", expanded=False):
+            _all_sources = sorted(
+                {l.source for l in _sidebar_leads}, key=lambda s: s.value
+            )
+            _sel_sources = [
+                s for s in _all_sources
+                if st.checkbox(_source_label(s), value=True, key=f"src_{s.value}")
+            ]
+            if not _sel_sources:
+                _sel_sources = _all_sources
+        st.session_state["_f_sources"] = _sel_sources
+
+
+# ─── GENERATE LEADS ───────────────────────────────────────────────────────────
 if generate_btn:
     if not service_description.strip():
         st.warning("Please describe your business first.")
     else:
         try:
-            # Phase 1: AI picks neighborhoods & settings
             with st.spinner("Analyzing your business profile..."):
                 criteria = parse_lead_criteria(service_description.strip())
 
@@ -202,16 +592,15 @@ if generate_btn:
             include_condos = criteria["include_condos"]
 
             st.info(
-                f"Searching **{len(selected_neighborhoods)} neighborhoods** "
+                f"Targeting **{len(selected_neighborhoods)} neighborhoods** "
                 f"({', '.join(selected_neighborhoods)}), "
                 f"properties over **${min_market_value:,.0f}**"
             )
 
-            zip_codes = []
+            zip_codes: list[str] = []
             for name in selected_neighborhoods:
                 zip_codes.extend(NEIGHBORHOOD_ZIP_CODES.get(name, []))
 
-            # Check if DB has leads — if so, query instantly instead of live API calls
             db_count = get_lead_count(_db)
 
             if db_count > 0:
@@ -224,10 +613,7 @@ if generate_btn:
                     individuals_only=individuals_only,
                 )
             else:
-                # Fall back to live API calls
-                with st.spinner(
-                    f"Searching NYC properties and SEC insider sales..."
-                ):
+                with st.spinner("Searching NYC properties and SEC insider sales..."):
                     progress_cb = None
                     if include_condos:
                         acris_status = st.empty()
@@ -237,7 +623,7 @@ if generate_btn:
                             pct = completed / total if total > 0 else 0
                             acris_bar.progress(
                                 pct,
-                                text=f"Scanning condo deed records... ({completed}/{total} building groups)",
+                                text=f"Scanning condo deed records… ({completed}/{total})",
                             )
 
                     leads = fetch_properties(
@@ -251,12 +637,10 @@ if generate_btn:
                         progress_callback=progress_cb,
                     )
 
-                # Clean up progress bar
                 if include_condos:
                     acris_bar.empty()
                     acris_status.empty()
 
-                # SEC EDGAR insider sales
                 try:
                     configure_edgar()
                     sec_leads = fetch_insider_sales(lookback_days=30, max_filings=1_000)
@@ -264,16 +648,16 @@ if generate_btn:
                 except Exception as sec_exc:
                     logger.warning("SEC EDGAR fetch failed: %s", sec_exc)
 
-                # FEC campaign finance donors
                 try:
-                    fec_leads = fetch_fec_donors(min_donation=2_500.0, lookback_days=180, max_results=0)
+                    fec_leads = fetch_fec_donors(
+                        min_donation=2_500.0, lookback_days=180, max_results=0
+                    )
                     leads = leads + fec_leads
                 except Exception as fec_exc:
                     logger.warning("FEC fetch failed: %s", fec_exc)
 
                 leads = _deduplicate_leads(leads)
 
-                # Save live results to DB for next time
                 try:
                     save_leads(_db, leads)
                 except Exception as db_exc:
@@ -283,80 +667,158 @@ if generate_btn:
             st.session_state["service_description"] = service_description.strip()
             st.session_state["search_done"] = True
             st.session_state["current_page"] = 0
+            st.session_state.pop("selected_lead_idx", None)
+
         except Exception as exc:
             st.error(f"Error: {exc}")
             st.session_state["search_done"] = False
 
 
+# ─── MAIN CONTENT ─────────────────────────────────────────────────────────────
+if not st.session_state.get("search_done"):
+    # ── Welcome / hero screen ──────────────────────────────────────────────────
+    st.markdown(
+        """
+        <div class="welcome-hero">
+          <div class="welcome-title">Veranda</div>
+          <div class="welcome-rule"></div>
+          <div class="welcome-sub">NYC Luxury Lead Intelligence</div>
+          <p class="welcome-body">
+            Describe your service in the left panel. Veranda identifies
+            high-net-worth property owners, SEC insiders, and major campaign
+            donors — then crafts bespoke outreach for each prospect.
+          </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-# =========================================================================
-# SECTION 4: RESULTS
-# =========================================================================
-if st.session_state.get("search_done"):
-    leads: list[Lead] = st.session_state.get("leads", [])
+else:
+    # ── Retrieve + sort leads ──────────────────────────────────────────────────
+    all_leads: list[Lead] = st.session_state.get("leads", [])
+    sorted_leads = sorted(all_leads, key=lambda l: l.estimated_wealth or 0, reverse=True)
 
-    if not leads:
-        st.warning(
-            "No properties found matching your criteria. "
-            "Try lowering the minimum value or adding more neighborhoods."
-        )
-    else:
-        st.divider()
-        st.header("Results")
+    # ── Apply sidebar filters ──────────────────────────────────────────────────
+    def _apply_filters(leads: list[Lead]) -> list[Lead]:
+        f_nbhds: list[str] = st.session_state.get("_f_nbhds", [])
+        f_types: list[str] = st.session_state.get("_f_types", [])
+        f_price: tuple[int, int] = st.session_state.get("_f_price", (0, 999_999_999))
+        f_sources: list[LeadSource] = st.session_state.get("_f_sources", [])
 
-        # --- Metrics ---
-        st.metric("Total Leads", len(leads))
+        result = []
+        for lead in leads:
+            nbhd = _get_neighborhood(lead)
+            if f_nbhds and nbhd != "Other" and nbhd not in f_nbhds:
+                continue
+            if (
+                f_types
+                and lead.building_type
+                and lead.source not in (LeadSource.SEC_EDGAR, LeadSource.FEC_CAMPAIGN_FINANCE)
+                and lead.building_type not in f_types
+            ):
+                continue
+            if lead.deed_sale_amount and not (
+                f_price[0] <= lead.deed_sale_amount <= f_price[1]
+            ):
+                continue
+            if f_sources and lead.source not in f_sources:
+                continue
+            result.append(lead)
+        return result
 
-        st.divider()
+    filtered_leads = _apply_filters(sorted_leads)
 
-        # --- Results Table ---
-        rows = []
-        sorted_leads = sorted(leads, key=lambda l: l.estimated_wealth or 0, reverse=True)
+    if not filtered_leads:
+        st.warning("No leads match the current filters. Adjust the sidebar to broaden results.")
+        st.stop()
 
-        for lead in sorted_leads:
-            is_llc = lead.company is not None and lead.first_name == ""
-            owner_name = lead.full_name if not is_llc else lead.company
+    # ── Metrics row ───────────────────────────────────────────────────────────
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Total Leads", f"{len(filtered_leads):,}")
 
-            if not is_llc and lead.first_name:
-                links = generate_search_links(
-                    lead.first_name,
-                    lead.last_name,
-                    city=lead.city or "New York",
-                    address=lead.address or "",
+    _vals = [l.estimated_wealth for l in filtered_leads if l.estimated_wealth]
+    _avg_val = sum(_vals) / len(_vals) if _vals else None
+    m2.metric("Avg. Est. Value", _fmt_value(_avg_val))
+
+    m3.metric("Properties", f"{sum(1 for l in filtered_leads if l.source == LeadSource.TAX_ASSESSOR):,}")
+    m4.metric(
+        "Insider / Donor",
+        f"{sum(1 for l in filtered_leads if l.source in (LeadSource.SEC_EDGAR, LeadSource.FEC_CAMPAIGN_FINANCE)):,}",
+    )
+
+    st.markdown("<div style='height:1rem;'></div>", unsafe_allow_html=True)
+
+    # ── Search bar ────────────────────────────────────────────────────────────
+    search_query = st.text_input(
+        "Search",
+        placeholder="Search by name, address, neighborhood, or company…",
+        key="lead_search",
+        label_visibility="collapsed",
+    )
+    if search_query.strip():
+        q = search_query.strip().lower()
+        filtered_leads = [
+            l
+            for l in filtered_leads
+            if q
+            in " ".join(
+                filter(
+                    None,
+                    [
+                        l.full_name,
+                        l.address,
+                        l.company,
+                        l.building_type,
+                        l.professional_title,
+                        _get_neighborhood(l),
+                    ],
                 )
-                google_link = links["google"]
-                linkedin_link = links["linkedin"]
-                maps_link = links["maps"]
-            else:
-                google_link = ""
-                linkedin_link = ""
-                if lead.address:
-                    from urllib.parse import quote_plus
-                    maps_link = f"https://www.google.com/maps/search/?api=1&query={quote_plus(lead.address + ' New York')}"
-                else:
-                    maps_link = ""
+            ).lower()
+        ]
+        st.caption(
+            f"{len(filtered_leads)} result{'s' if len(filtered_leads) != 1 else ''} "
+            f"for \"{search_query.strip()}\""
+        )
 
-            # Build enriched data string — property details for real estate
-            # leads, professional/sale details for SEC insider and FEC leads
-            info_parts = []
+    # ── Pagination state ──────────────────────────────────────────────────────
+    total_leads = len(filtered_leads)
+    total_pages = max(1, math.ceil(total_leads / LEADS_PER_PAGE))
+    current_page = min(
+        st.session_state.get("current_page", 0), total_pages - 1
+    )
+    start_idx = current_page * LEADS_PER_PAGE
+    end_idx = min(start_idx + LEADS_PER_PAGE, total_leads)
+    page_leads = filtered_leads[start_idx:end_idx]
+
+    # ── Determine layout: split if a lead is selected ─────────────────────────
+    selected_idx = st.session_state.get("selected_lead_idx")
+    has_selection = selected_idx is not None and selected_idx < len(filtered_leads)
+
+    if has_selection:
+        gallery_col, detail_col = st.columns([5, 4], gap="large")
+    else:
+        gallery_col = st.container()
+        detail_col = None
+
+    # ── Gallery ───────────────────────────────────────────────────────────────
+    with gallery_col:
+        rows = []
+        for i, lead in enumerate(page_leads):
+            is_llc = lead.company is not None and lead.first_name == ""
+            owner = lead.company if is_llc else lead.full_name
+            nbhd = _get_neighborhood(lead)
+
+            info_parts: list[str] = []
             if lead.source == LeadSource.SEC_EDGAR:
                 if lead.professional_title:
                     info_parts.append(lead.professional_title)
                 if lead.company:
                     info_parts.append(lead.company)
-                if lead.estimated_wealth:
-                    info_parts.append(f"Insider sale ${lead.estimated_wealth:,.0f}")
-                info_parts.append(lead.discovery_trigger)
             elif lead.source == LeadSource.FEC_CAMPAIGN_FINANCE:
-                if lead.professional_title:
-                    info_parts.append(lead.professional_title)
                 if lead.company:
                     info_parts.append(lead.company)
-                if lead.city and lead.state:
-                    info_parts.append(f"{lead.city}, {lead.state}")
-                if lead.estimated_wealth:
-                    info_parts.append(f"Donated ${lead.estimated_wealth:,.0f}")
-                info_parts.append(lead.discovery_trigger)
+                if lead.city:
+                    info_parts.append(lead.city)
             else:
                 if lead.address:
                     addr = lead.address
@@ -365,214 +827,252 @@ if st.session_state.get("search_done"):
                     info_parts.append(addr)
                 if lead.building_type:
                     info_parts.append(lead.building_type)
-                if lead.year_built:
-                    info_parts.append(f"Built {lead.year_built}")
-                if lead.building_area:
-                    info_parts.append(f"{lead.building_area:,} sq ft")
-                if lead.num_floors:
-                    info_parts.append(f"{lead.num_floors} floors")
-                if lead.estimated_wealth:
-                    info_parts.append(f"Est. ${lead.estimated_wealth:,.0f}")
-                if lead.deed_sale_amount:
-                    sale_str = f"Last sale ${lead.deed_sale_amount:,.0f}"
-                    if lead.deed_date:
-                        sale_str += f" ({lead.deed_date})"
-                    info_parts.append(sale_str)
+                if nbhd != "Other":
+                    info_parts.append(nbhd)
 
-            row = {
-                "Name": owner_name,
-                "Enriched User Data": " · ".join(info_parts) if info_parts else "—",
-                "Map": maps_link,
-                "Google": google_link,
-                "LinkedIn": linkedin_link,
-            }
-            rows.append(row)
+            rows.append(
+                {
+                    "#": start_idx + i + 1,
+                    "Name": owner,
+                    "Details": " · ".join(info_parts) if info_parts else "—",
+                    "Source": _source_label(lead.source),
+                    "Est. Value": _fmt_value(lead.estimated_wealth),
+                }
+            )
 
         df = pd.DataFrame(rows)
 
-        # --- Search / filter ---
-        search_query = st.text_input(
-            "Search leads",
-            placeholder="Type a name, address, or keyword to filter...",
-            key="lead_search",
-            label_visibility="collapsed",
-        )
-
-        if search_query.strip():
-            q = search_query.strip().lower()
-            mask = df.apply(
-                lambda row: q in " ".join(str(v).lower() for v in row.values),
-                axis=1,
-            )
-            filtered_df = df[mask]
-        else:
-            filtered_df = df
-
-        st.dataframe(
-            filtered_df,
+        table_event = st.dataframe(
+            df,
             column_config={
-                "Enriched User Data": st.column_config.TextColumn(),
-                "Map": st.column_config.LinkColumn(display_text="Map"),
-                "Google": st.column_config.LinkColumn(display_text="Search"),
-                "LinkedIn": st.column_config.LinkColumn(display_text="Search"),
+                "#": st.column_config.NumberColumn(width="small"),
+                "Name": st.column_config.TextColumn(width="medium"),
+                "Details": st.column_config.TextColumn(width="large"),
+                "Source": st.column_config.TextColumn(width="small"),
+                "Est. Value": st.column_config.TextColumn(width="small"),
             },
-            width="stretch",
             hide_index=True,
+            use_container_width=True,
+            selection_mode="single-row",
+            on_select="rerun",
+            key="lead_table",
+            height=min(620, max(200, 38 + len(df) * 35)),
         )
 
-        if search_query.strip():
-            st.caption(f"{len(filtered_df)} of {len(df)} leads match \"{search_query.strip()}\"")
+        # Handle row selection from the dataframe
+        _sel_rows = (
+            table_event.selection.rows
+            if hasattr(table_event, "selection") and table_event.selection
+            else []
+        )
+        if _sel_rows:
+            _new_idx = start_idx + _sel_rows[0]
+            if _new_idx != st.session_state.get("selected_lead_idx"):
+                st.session_state["selected_lead_idx"] = _new_idx
+                st.rerun()
 
-        # --- Paginated Lead Cards ---
-        st.subheader("Lead Details")
-
-        total_leads = len(sorted_leads)
-        total_pages = max(1, math.ceil(total_leads / LEADS_PER_PAGE))
-        current_page = st.session_state.get("current_page", 0)
-        current_page = min(current_page, total_pages - 1)
-
-        start_idx = current_page * LEADS_PER_PAGE
-        end_idx = min(start_idx + LEADS_PER_PAGE, total_leads)
-        page_leads = sorted_leads[start_idx:end_idx]
-
-        st.caption(f"Showing {start_idx + 1}–{end_idx} of {total_leads}")
-
-        has_gemini = _get_llm_key() is not None
-
-        for i, lead in enumerate(page_leads):
-            global_idx = start_idx + i  # index into sorted_leads
-            is_llc = lead.company is not None and lead.first_name == ""
-            label = lead.company if is_llc else lead.full_name
-            badge = " [LLC]" if is_llc else ""
-            value_str = f"${lead.estimated_wealth:,.0f}" if lead.estimated_wealth else "—"
-
-            with st.expander(f"{label}{badge} — {value_str}"):
-                detail_col1, detail_col2 = st.columns(2)
-
-                with detail_col1:
-                    if lead.source == LeadSource.SEC_EDGAR:
-                        if lead.professional_title:
-                            st.markdown(f"**Title:** {lead.professional_title}")
-                        if lead.company:
-                            st.markdown(f"**Company:** {lead.company}")
-                        if lead.estimated_wealth:
-                            st.markdown(f"**Insider Sale:** ${lead.estimated_wealth:,.0f}")
-                        st.markdown(f"**Trigger:** {lead.discovery_trigger}")
-                    elif lead.source == LeadSource.FEC_CAMPAIGN_FINANCE:
-                        if lead.professional_title:
-                            st.markdown(f"**Occupation:** {lead.professional_title}")
-                        if lead.company:
-                            st.markdown(f"**Employer:** {lead.company}")
-                        if lead.city and lead.state:
-                            st.markdown(f"**Location:** {lead.city}, {lead.state}")
-                        if lead.zip_code:
-                            st.markdown(f"**Zip:** {lead.zip_code}")
-                        if lead.estimated_wealth:
-                            st.markdown(f"**Donation:** ${lead.estimated_wealth:,.0f}")
-                        st.markdown(f"**Trigger:** {lead.discovery_trigger}")
-                    else:
-                        if lead.address:
-                            st.markdown(f"**Address:** {lead.address}")
-                        if lead.unit_number:
-                            st.markdown(f"**Unit:** {lead.unit_number}")
-                        if lead.building_type:
-                            st.markdown(f"**Type:** {lead.building_type}")
-                        if lead.year_built:
-                            st.markdown(f"**Year Built:** {lead.year_built}")
-                        if lead.building_area:
-                            st.markdown(f"**Building Size:** {lead.building_area:,} sq ft")
-                        if lead.lot_area:
-                            st.markdown(f"**Lot Size:** {lead.lot_area:,} sq ft")
-                        if lead.num_floors:
-                            st.markdown(f"**Floors:** {lead.num_floors}")
-                        if lead.zip_code:
-                            st.markdown(f"**Zip Code:** {lead.zip_code}")
-                        if lead.deed_sale_amount:
-                            st.markdown(f"**Last Sale Price:** ${lead.deed_sale_amount:,.0f}")
-                        if lead.deed_date:
-                            st.markdown(f"**Last Sale Date:** {lead.deed_date}")
-
-                with detail_col2:
-                    st.markdown(f"**Est. Value:** {value_str}")
-                    if lead.source not in (LeadSource.SEC_EDGAR, LeadSource.FEC_CAMPAIGN_FINANCE):
-                        st.markdown(f"**Trigger:** {lead.discovery_trigger}")
-
-                    # Outreach: show if already generated, otherwise show button
-                    if lead.outreach_draft:
-                        st.markdown("**Outreach Message:**")
-                        st.text_area(
-                            "outreach",
-                            value=lead.outreach_draft,
-                            height=100,
-                            key=f"outreach_text_{global_idx}",
-                            label_visibility="collapsed",
-                        )
-                    elif is_llc:
-                        st.caption(
-                            "LLC-owned — outreach requires finding the person behind the entity."
-                        )
-                    elif has_gemini and st.session_state.get("service_description", ""):
-                        if st.button("Write Outreach", key=f"outreach_{global_idx}"):
-                            svc_desc = st.session_state["service_description"]
-                            with st.spinner("Writing..."):
-                                generate_outreach_for_lead(
-                                    lead,
-                                    svc_desc,
-                                    svc_desc,
-                                )
-                            if lead.outreach_draft:
-                                # Persist outreach to DB
-                                name_key = _make_name_key(lead.first_name, lead.last_name)
-                                update_outreach(_db, name_key, "draft_ready", lead.outreach_draft)
-                                st.markdown("**Outreach Message:**")
-                                st.text_area(
-                                    "outreach",
-                                    value=lead.outreach_draft,
-                                    height=100,
-                                    key=f"outreach_gen_{global_idx}",
-                                    label_visibility="collapsed",
-                                )
-                            else:
-                                st.warning("Rate limited — wait a minute and try again.")
-                    elif not has_gemini:
-                        st.caption("Add GROQ_API_KEY to .env to enable outreach.")
-
-                    st.markdown("---")
-                    if not is_llc and lead.first_name:
-                        links = generate_search_links(
-                            lead.first_name,
-                            lead.last_name,
-                            city=lead.city or "New York",
-                            address=lead.address or "",
-                        )
-                        link_col1, link_col2, link_col3 = st.columns(3)
-                        link_col1.markdown(f"[Google Search]({links['google']})")
-                        link_col2.markdown(f"[LinkedIn Search]({links['linkedin']})")
-                        if links["maps"]:
-                            link_col3.markdown(f"[Google Maps]({links['maps']})")
-                    elif lead.address:
-                        from urllib.parse import quote_plus as _qp
-                        maps_url = f"https://www.google.com/maps/search/?api=1&query={_qp(lead.address + ' New York')}"
-                        st.markdown(f"[Google Maps]({maps_url})")
-
-        # --- Pagination controls ---
+        # Pagination controls
         if total_pages > 1:
-            st.divider()
-            prev_col, info_col, next_col = st.columns([1, 2, 1])
+            st.markdown("<div style='height:0.5rem;'></div>", unsafe_allow_html=True)
+            pg_caption, prev_btn, pg_info, next_btn = st.columns([3, 1, 1, 1])
+            pg_caption.caption(f"Showing {start_idx + 1}–{end_idx} of {total_leads} leads")
 
-            with prev_col:
-                if st.button("Previous", disabled=(current_page == 0), width="stretch", key="prev_page"):
+            with prev_btn:
+                if st.button(
+                    "← Prev",
+                    disabled=(current_page == 0),
+                    use_container_width=True,
+                    key="prev_page",
+                ):
                     st.session_state["current_page"] = current_page - 1
+                    st.session_state.pop("selected_lead_idx", None)
                     st.rerun()
 
-            with info_col:
+            pg_info.markdown(
+                f"<div style='text-align:center; padding:6px 0; font-size:11px; "
+                f"color:#7A7570;'>{current_page + 1} / {total_pages}</div>",
+                unsafe_allow_html=True,
+            )
+
+            with next_btn:
+                if st.button(
+                    "Next →",
+                    disabled=(current_page >= total_pages - 1),
+                    use_container_width=True,
+                    key="next_page",
+                ):
+                    st.session_state["current_page"] = current_page + 1
+                    st.session_state.pop("selected_lead_idx", None)
+                    st.rerun()
+
+    # ── Detail Drawer ─────────────────────────────────────────────────────────
+    if has_selection and detail_col is not None:
+        lead = filtered_leads[selected_idx]
+        is_llc = lead.company is not None and lead.first_name == ""
+        display_name = lead.company if is_llc else lead.full_name
+        has_llm = _get_llm_key() is not None
+        nbhd = _get_neighborhood(lead)
+
+        with detail_col:
+            # Close button
+            _close_col, _ = st.columns([2, 5])
+            with _close_col:
+                if st.button("✕  Close", key="close_detail"):
+                    del st.session_state["selected_lead_idx"]
+                    st.rerun()
+
+            st.markdown("<div style='height:0.25rem;'></div>", unsafe_allow_html=True)
+
+            # Name + trigger headline
+            st.markdown(
+                f'<div class="detail-name">{display_name}</div>'
+                f'<div class="detail-trigger">{lead.discovery_trigger}</div>',
+                unsafe_allow_html=True,
+            )
+
+            # Source badge + value
+            _badge_col, _val_col = st.columns([3, 2])
+            with _badge_col:
                 st.markdown(
-                    f"<div style='text-align:center; padding:8px; color:#666;'>"
-                    f"Page {current_page + 1} of {total_pages}</div>",
+                    f'<span class="source-badge">{_source_label(lead.source)}</span>',
+                    unsafe_allow_html=True,
+                )
+            with _val_col:
+                st.markdown(
+                    f"<div style='text-align:right; font-family:\"Cormorant Garamond\",serif;"
+                    f" font-size:1.4rem; color:#C8A96E;'>"
+                    f"{_fmt_value(lead.estimated_wealth)}</div>",
                     unsafe_allow_html=True,
                 )
 
-            with next_col:
-                if st.button("Next", disabled=(current_page >= total_pages - 1), width="stretch", key="next_page"):
-                    st.session_state["current_page"] = current_page + 1
-                    st.rerun()
+            st.markdown("<hr>", unsafe_allow_html=True)
+
+            # Property / profile data rows
+            def _row(label: str, value: str) -> None:
+                st.markdown(
+                    f'<div class="detail-row">'
+                    f'<span class="detail-label">{label}</span>'
+                    f'<span class="detail-value">{value}</span>'
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+
+            if lead.source == LeadSource.SEC_EDGAR:
+                if lead.professional_title:
+                    _row("Title", lead.professional_title)
+                if lead.company:
+                    _row("Company", lead.company)
+                if lead.estimated_wealth:
+                    _row("Insider Sale", f"${lead.estimated_wealth:,.0f}")
+
+            elif lead.source == LeadSource.FEC_CAMPAIGN_FINANCE:
+                if lead.professional_title:
+                    _row("Occupation", lead.professional_title)
+                if lead.company:
+                    _row("Employer", lead.company)
+                if lead.city and lead.state:
+                    _row("Location", f"{lead.city}, {lead.state}")
+                if lead.zip_code:
+                    _row("ZIP", lead.zip_code)
+                if lead.estimated_wealth:
+                    _row("Donation Amount", f"${lead.estimated_wealth:,.0f}")
+
+            else:
+                if lead.address:
+                    addr = lead.address
+                    if lead.unit_number:
+                        addr += f", Unit {lead.unit_number}"
+                    _row("Address", addr)
+                if nbhd != "Other":
+                    _row("Neighborhood", nbhd)
+                if lead.building_type:
+                    _row("Property Type", lead.building_type)
+                if lead.year_built:
+                    _row("Year Built", str(lead.year_built))
+                if lead.building_area:
+                    _row("Building Area", f"{lead.building_area:,} sq ft")
+                if lead.lot_area:
+                    _row("Lot Area", f"{lead.lot_area:,} sq ft")
+                if lead.num_floors:
+                    _row("Floors", str(lead.num_floors))
+                if lead.zip_code:
+                    _row("ZIP Code", lead.zip_code)
+                if lead.deed_sale_amount:
+                    _row("Last Sale Price", f"${lead.deed_sale_amount:,.0f}")
+                if lead.deed_date:
+                    _row("Last Sale Date", lead.deed_date)
+
+            st.markdown("<div style='height:1.25rem;'></div>", unsafe_allow_html=True)
+
+            # Outreach section
+            st.markdown('<div class="section-label">Outreach</div>', unsafe_allow_html=True)
+
+            if lead.outreach_draft:
+                st.text_area(
+                    "Outreach draft",
+                    value=lead.outreach_draft,
+                    height=130,
+                    key=f"outreach_text_{selected_idx}",
+                    label_visibility="collapsed",
+                )
+            elif is_llc:
+                st.caption("LLC-owned — identify the principal before drafting outreach.")
+            elif has_llm and st.session_state.get("service_description", ""):
+                if st.button(
+                    "Write Outreach Message",
+                    type="primary",
+                    use_container_width=True,
+                    key=f"outreach_btn_{selected_idx}",
+                ):
+                    svc = st.session_state["service_description"]
+                    with st.spinner("Crafting your message…"):
+                        generate_outreach_for_lead(lead, svc, svc)
+                    if lead.outreach_draft:
+                        name_key = _make_name_key(lead.first_name, lead.last_name)
+                        update_outreach(_db, name_key, "draft_ready", lead.outreach_draft)
+                        st.rerun()
+                    else:
+                        st.warning("Rate limited — please wait a moment and try again.")
+            else:
+                st.caption("Add GROQ_API_KEY to .env to enable outreach generation.")
+
+            # Search links
+            st.markdown("<div style='height:0.5rem;'></div>", unsafe_allow_html=True)
+            if not is_llc and lead.first_name:
+                links = generate_search_links(
+                    lead.first_name,
+                    lead.last_name,
+                    city=lead.city or "New York",
+                    address=lead.address or "",
+                )
+                _lc1, _lc2, _lc3 = st.columns(3)
+                _lc1.markdown(
+                    f"<a href='{links['google']}' target='_blank' "
+                    f"style='font-size:11px; color:#C8A96E; text-decoration:none; "
+                    f"letter-spacing:0.06em;'>Google →</a>",
+                    unsafe_allow_html=True,
+                )
+                _lc2.markdown(
+                    f"<a href='{links['linkedin']}' target='_blank' "
+                    f"style='font-size:11px; color:#C8A96E; text-decoration:none; "
+                    f"letter-spacing:0.06em;'>LinkedIn →</a>",
+                    unsafe_allow_html=True,
+                )
+                if links.get("maps"):
+                    _lc3.markdown(
+                        f"<a href='{links['maps']}' target='_blank' "
+                        f"style='font-size:11px; color:#C8A96E; text-decoration:none; "
+                        f"letter-spacing:0.06em;'>Maps →</a>",
+                        unsafe_allow_html=True,
+                    )
+            elif lead.address:
+                maps_url = (
+                    f"https://www.google.com/maps/search/?api=1&query="
+                    f"{quote_plus(lead.address + ' New York')}"
+                )
+                st.markdown(
+                    f"<a href='{maps_url}' target='_blank' "
+                    f"style='font-size:11px; color:#C8A96E; text-decoration:none; "
+                    f"letter-spacing:0.06em;'>Google Maps →</a>",
+                    unsafe_allow_html=True,
+                )
