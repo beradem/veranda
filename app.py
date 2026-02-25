@@ -203,10 +203,14 @@ input::placeholder, textarea::placeholder { color: var(--text-dim) !important; }
 
 /* ── Checkboxes / Sliders ────────────────────────────────────────────────── */
 .stCheckbox label span,
-.stRadio label span {
+.stCheckbox label p,
+.stRadio label span,
+.stRadio label p,
+[data-testid="stCheckbox"] label p,
+[data-testid="stCheckbox"] label span {
   font-family: var(--sans) !important;
   font-size: 12px !important;
-  color: var(--text-dim) !important;
+  color: #EDE8E0 !important;
   text-transform: none !important;
   letter-spacing: normal !important;
   font-weight: 400 !important;
@@ -423,9 +427,7 @@ with st.sidebar:
             _sync_dt = _last_sync
         st.markdown(
             f"<p style='font-size:11px; color:#7A7570; margin-bottom:1.25rem;'>"
-            f"{_db_count:,} leads · synced {_sync_dt} · "
-            f"<a href='?browse_all=1' style='color:#C8A96E; text-decoration:none;'>"
-            f"browse all</a></p>",
+            f"{_db_count:,} leads · synced {_sync_dt}</p>",
             unsafe_allow_html=True,
         )
 
@@ -508,17 +510,6 @@ with st.sidebar:
         _all_nbhds = sorted(
             {_get_neighborhood(l) for l in _sidebar_leads if _get_neighborhood(l) != "Other"}
         )
-        _all_types = sorted(
-            {
-                l.building_type
-                for l in _sidebar_leads
-                if l.building_type
-                and l.source not in (LeadSource.SEC_EDGAR, LeadSource.FEC_CAMPAIGN_FINANCE)
-            }
-        )
-        _sale_vals = [l.deed_sale_amount for l in _sidebar_leads if l.deed_sale_amount]
-        _min_sale = int(min(_sale_vals)) if _sale_vals else 0
-        _max_sale = int(max(_sale_vals)) if _sale_vals else 10_000_000
 
         # Neighborhood
         if _all_nbhds:
@@ -532,48 +523,6 @@ with st.sidebar:
             st.session_state["_f_nbhds"] = _sel_nbhds
         else:
             st.session_state["_f_nbhds"] = []
-
-        # Property Type
-        if _all_types:
-            with st.expander("Property Type", expanded=False):
-                _sel_types = [
-                    t for t in _all_types[:18]
-                    if st.checkbox(t, value=True, key=f"ptype_{t}")
-                ]
-                if not _sel_types:
-                    _sel_types = _all_types
-            st.session_state["_f_types"] = _sel_types
-        else:
-            st.session_state["_f_types"] = []
-
-        # Last Sale Price
-        if _sale_vals and _min_sale < _max_sale:
-            with st.expander("Last Sale Price", expanded=False):
-                _price_range = st.slider(
-                    "Price range",
-                    min_value=_min_sale,
-                    max_value=_max_sale,
-                    value=(_min_sale, _max_sale),
-                    format="$%d",
-                    key="price_slider",
-                    label_visibility="collapsed",
-                )
-            st.session_state["_f_price"] = _price_range
-        else:
-            st.session_state["_f_price"] = (_min_sale, _max_sale)
-
-        # Data Source
-        with st.expander("Data Source", expanded=False):
-            _all_sources = sorted(
-                {l.source for l in _sidebar_leads}, key=lambda s: s.value
-            )
-            _sel_sources = [
-                s for s in _all_sources
-                if st.checkbox(_source_label(s), value=True, key=f"src_{s.value}")
-            ]
-            if not _sel_sources:
-                _sel_sources = _all_sources
-        st.session_state["_f_sources"] = _sel_sources
 
 
 # ─── GENERATE LEADS ───────────────────────────────────────────────────────────
@@ -683,11 +632,6 @@ if not st.session_state.get("search_done"):
           <div class="welcome-title">Veranda</div>
           <div class="welcome-rule"></div>
           <div class="welcome-sub">NYC Luxury Lead Intelligence</div>
-          <p class="welcome-body">
-            Describe your service in the left panel. Veranda identifies
-            high-net-worth property owners, SEC insiders, and major campaign
-            donors — then crafts bespoke outreach for each prospect.
-          </p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -701,27 +645,10 @@ else:
     # ── Apply sidebar filters ──────────────────────────────────────────────────
     def _apply_filters(leads: list[Lead]) -> list[Lead]:
         f_nbhds: list[str] = st.session_state.get("_f_nbhds", [])
-        f_types: list[str] = st.session_state.get("_f_types", [])
-        f_price: tuple[int, int] = st.session_state.get("_f_price", (0, 999_999_999))
-        f_sources: list[LeadSource] = st.session_state.get("_f_sources", [])
-
         result = []
         for lead in leads:
             nbhd = _get_neighborhood(lead)
             if f_nbhds and nbhd != "Other" and nbhd not in f_nbhds:
-                continue
-            if (
-                f_types
-                and lead.building_type
-                and lead.source not in (LeadSource.SEC_EDGAR, LeadSource.FEC_CAMPAIGN_FINANCE)
-                and lead.building_type not in f_types
-            ):
-                continue
-            if lead.deed_sale_amount and not (
-                f_price[0] <= lead.deed_sale_amount <= f_price[1]
-            ):
-                continue
-            if f_sources and lead.source not in f_sources:
                 continue
             result.append(lead)
         return result
@@ -733,18 +660,7 @@ else:
         st.stop()
 
     # ── Metrics row ───────────────────────────────────────────────────────────
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Total Leads", f"{len(filtered_leads):,}")
-
-    _vals = [l.estimated_wealth for l in filtered_leads if l.estimated_wealth]
-    _avg_val = sum(_vals) / len(_vals) if _vals else None
-    m2.metric("Avg. Est. Value", _fmt_value(_avg_val))
-
-    m3.metric("Properties", f"{sum(1 for l in filtered_leads if l.source == LeadSource.TAX_ASSESSOR):,}")
-    m4.metric(
-        "Insider / Donor",
-        f"{sum(1 for l in filtered_leads if l.source in (LeadSource.SEC_EDGAR, LeadSource.FEC_CAMPAIGN_FINANCE)):,}",
-    )
+    st.metric("Total Leads", f"{len(filtered_leads):,}")
 
     st.markdown("<div style='height:1rem;'></div>", unsafe_allow_html=True)
 
@@ -835,8 +751,6 @@ else:
                     "#": start_idx + i + 1,
                     "Name": owner,
                     "Details": " · ".join(info_parts) if info_parts else "—",
-                    "Source": _source_label(lead.source),
-                    "Est. Value": _fmt_value(lead.estimated_wealth),
                 }
             )
 
@@ -848,8 +762,6 @@ else:
                 "#": st.column_config.NumberColumn(width="small"),
                 "Name": st.column_config.TextColumn(width="medium"),
                 "Details": st.column_config.TextColumn(width="large"),
-                "Source": st.column_config.TextColumn(width="small"),
-                "Est. Value": st.column_config.TextColumn(width="small"),
             },
             hide_index=True,
             use_container_width=True,
@@ -918,7 +830,8 @@ else:
             _close_col, _ = st.columns([2, 5])
             with _close_col:
                 if st.button("✕  Close", key="close_detail"):
-                    del st.session_state["selected_lead_idx"]
+                    st.session_state.pop("selected_lead_idx", None)
+                    st.session_state.pop("lead_table", None)
                     st.rerun()
 
             st.markdown("<div style='height:0.25rem;'></div>", unsafe_allow_html=True)
