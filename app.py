@@ -47,11 +47,7 @@ st.markdown("""
     .block-container { padding-top: 1rem !important; max-width: 75% !important; }
     header[data-testid="stHeader"] { display: none !important; }
 
-    /* File uploader — tiny icon-only button */
-    [data-testid="stFileUploader"] {
-        width: auto !important;
-        display: inline-block !important;
-    }
+    /* File uploader — disguised as underlined text trigger */
     [data-testid="stFileUploader"] section {
         padding: 0 !important;
     }
@@ -68,13 +64,23 @@ st.markdown("""
         display: none !important;
     }
     [data-testid="stFileUploader"] section > button {
+        background: none !important;
+        border: none !important;
+        box-shadow: none !important;
         padding: 0 !important;
         min-height: 0 !important;
-        line-height: 1 !important;
+        height: auto !important;
+        margin-top: -0.75rem !important;
     }
-    /* Remove gap between label column and upload column */
-    [data-testid="stHorizontalBlock"]:has([data-testid="stFileUploader"]) {
-        gap: 0 !important;
+    [data-testid="stFileUploader"] section > button p {
+        display: none !important;
+    }
+    [data-testid="stFileUploader"] section > button::after {
+        content: "upload a file describing your services";
+        color: rgba(49, 51, 63, 0.6);
+        font-size: 0.875rem;
+        text-decoration: underline;
+        cursor: pointer;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -136,16 +142,13 @@ if st.query_params.get("browse_all") == "1":
 # =========================================================================
 st.header("Your Business")
 
-label_col, upload_col = st.columns([20, 1])
-with label_col:
-    st.markdown("Tell us about your services and ideal customer")
-with upload_col:
-    uploaded_pdf = st.file_uploader(
-        "upload",
-        type=["pdf"],
-        key="pdf_upload",
-        label_visibility="collapsed",
-    )
+st.markdown("Tell us about your services and ideal customer, or")
+uploaded_pdf = st.file_uploader(
+    "upload",
+    type=["pdf"],
+    key="pdf_upload",
+    label_visibility="collapsed",
+)
 
 service_description = st.text_area(
     "Business description",
