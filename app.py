@@ -58,6 +58,7 @@ st.set_page_config(
     page_title="Veranda",
     page_icon="🏡",
     layout="wide",
+    initial_sidebar_state="expanded",
 )
 
 # ─── LUXURY THEME ─────────────────────────────────────────────────────────────
@@ -90,10 +91,8 @@ st.markdown(
   font-family: var(--sans) !important;
 }
 header[data-testid="stHeader"] { display: none !important; }
-[data-testid="collapsedControl"] {
-  display: flex !important;
-  visibility: visible !important;
-}
+[data-testid="stSidebarCollapseButton"] { display: none !important; }
+[data-testid="collapsedControl"] { display: none !important; }
 .block-container {
   padding-top: 1.5rem !important;
   padding-bottom: 4rem !important;
@@ -106,6 +105,10 @@ header[data-testid="stHeader"] { display: none !important; }
 [data-testid="stSidebar"] {
   background-color: var(--bg-sidebar) !important;
   border-right: 1px solid var(--border) !important;
+  transform: none !important;
+  margin-left: 0 !important;
+  min-width: 21rem !important;
+  width: 21rem !important;
 }
 [data-testid="stSidebar"] > div {
   background-color: var(--bg-sidebar) !important;
