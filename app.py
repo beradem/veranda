@@ -90,6 +90,10 @@ st.markdown(
   font-family: var(--sans) !important;
 }
 header[data-testid="stHeader"] { display: none !important; }
+[data-testid="collapsedControl"] {
+  display: flex !important;
+  visibility: visible !important;
+}
 .block-container {
   padding-top: 1.5rem !important;
   padding-bottom: 4rem !important;
@@ -402,7 +406,7 @@ with st.sidebar:
     # ── Brand mark ──
     st.markdown(
         """
-        <div style="padding: 1rem 0 1.5rem;">
+        <div style="padding: 0 0 1.5rem;">
           <div style="font-family:'Cormorant Garamond',serif; font-size:1.55rem;
                       font-weight:400; letter-spacing:0.1em; color:#EDE8E0;">
             VERANDA
