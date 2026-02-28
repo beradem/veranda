@@ -50,6 +50,7 @@ class Lead(BaseModel):
     company: Optional[str] = None
     linkedin_url: Optional[str] = None
     email: Optional[str] = None
+    phone: Optional[str] = None
 
     # Wealth signals
     estimated_wealth: Optional[float] = Field(

@@ -909,6 +909,45 @@ else:
 
             st.markdown("<div style='height:1.25rem;'></div>", unsafe_allow_html=True)
 
+            # Contact reveal buttons
+            _email_col, _phone_col = st.columns(2)
+            with _email_col:
+                email_revealed_key = f"reveal_email_{selected_idx}"
+                if st.session_state.get(email_revealed_key):
+                    st.markdown(
+                        f"<div style='font-size:12px; color:#C8A96E; padding:6px 0; "
+                        f"letter-spacing:0.04em;'>"
+                        f"{lead.email if lead.email else '—'}</div>",
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    if st.button(
+                        "Reveal Email",
+                        use_container_width=True,
+                        key=f"btn_reveal_email_{selected_idx}",
+                    ):
+                        st.session_state[email_revealed_key] = True
+                        st.rerun()
+            with _phone_col:
+                phone_revealed_key = f"reveal_phone_{selected_idx}"
+                if st.session_state.get(phone_revealed_key):
+                    st.markdown(
+                        f"<div style='font-size:12px; color:#C8A96E; padding:6px 0; "
+                        f"letter-spacing:0.04em;'>"
+                        f"{lead.phone if lead.phone else '—'}</div>",
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    if st.button(
+                        "Reveal Phone",
+                        use_container_width=True,
+                        key=f"btn_reveal_phone_{selected_idx}",
+                    ):
+                        st.session_state[phone_revealed_key] = True
+                        st.rerun()
+
+            st.markdown("<div style='height:0.75rem;'></div>", unsafe_allow_html=True)
+
             # Outreach section
             st.markdown('<div class="section-label">Outreach</div>', unsafe_allow_html=True)
 
