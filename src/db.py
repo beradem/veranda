@@ -40,6 +40,9 @@ CREATE TABLE IF NOT EXISTS leads (
     company          TEXT,
     linkedin_url     TEXT,
     email            TEXT,
+    phone            TEXT,
+    email_reveal_attempted  INTEGER NOT NULL DEFAULT 0,
+    phone_reveal_attempted  INTEGER NOT NULL DEFAULT 0,
     estimated_wealth REAL,
     discovery_trigger TEXT NOT NULL,
     year_built       INTEGER,
@@ -94,18 +97,46 @@ def get_connection(db_path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
     return conn
 
 
+def _migrate_db(conn: sqlite3.Connection) -> None:
+    """Add any columns that exist in the schema but not in the live table.
+
+    SQLite's CREATE TABLE IF NOT EXISTS won't add new columns to an existing
+    table, so this function uses PRAGMA table_info to detect missing columns
+    and ALTER TABLE to add them without data loss.
+    """
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(leads)")}
+    additions = {
+        "phone": "TEXT",
+        "email_reveal_attempted": "INTEGER NOT NULL DEFAULT 0",
+        "phone_reveal_attempted": "INTEGER NOT NULL DEFAULT 0",
+    }
+    for col, definition in additions.items():
+        if col not in existing:
+            conn.execute(f"ALTER TABLE leads ADD COLUMN {col} {definition}")
+    conn.commit()
+
+
 def init_db(conn: sqlite3.Connection) -> None:
     """Create tables and indexes if they don't exist.
 
     This is idempotent — safe to call every time the app starts.
     """
     conn.executescript(SCHEMA_SQL)
+    _migrate_db(conn)
     logger.info("Database schema initialized")
 
 
 def _make_name_key(first_name: str, last_name: str) -> str:
     """Build a dedup key from first and last name."""
     return f"{first_name}_{last_name}".lower().strip("_")
+
+
+def _safe_get(row: sqlite3.Row, key: str):
+    """Return row[key] or None if the column doesn't exist (pre-migration rows)."""
+    try:
+        return row[key]
+    except IndexError:
+        return None
 
 
 def _lead_to_row(lead: Lead) -> dict:
@@ -122,6 +153,9 @@ def _lead_to_row(lead: Lead) -> dict:
         "company": lead.company,
         "linkedin_url": lead.linkedin_url,
         "email": lead.email,
+        "phone": lead.phone,
+        "email_reveal_attempted": lead.email_reveal_attempted,
+        "phone_reveal_attempted": lead.phone_reveal_attempted,
         "estimated_wealth": lead.estimated_wealth,
         "discovery_trigger": lead.discovery_trigger,
         "year_built": lead.year_built,
@@ -153,6 +187,9 @@ def _row_to_lead(row: sqlite3.Row) -> Lead:
         company=row["company"],
         linkedin_url=row["linkedin_url"],
         email=row["email"],
+        phone=_safe_get(row, "phone"),
+        email_reveal_attempted=_safe_get(row, "email_reveal_attempted") or 0,
+        phone_reveal_attempted=_safe_get(row, "phone_reveal_attempted") or 0,
         estimated_wealth=row["estimated_wealth"],
         discovery_trigger=row["discovery_trigger"],
         year_built=row["year_built"],
@@ -380,6 +417,40 @@ def update_outreach(
         "UPDATE leads SET outreach_status = ?, outreach_draft = ?, "
         "updated_at = datetime('now') WHERE name_key = ?",
         (status, draft, name_key),
+    )
+    conn.commit()
+    return cursor.rowcount > 0
+
+
+def reveal_contact(
+    conn: sqlite3.Connection,
+    name_key: str,
+    email: Optional[str],
+    phone: Optional[str],
+    email_attempted: bool,
+    phone_attempted: bool,
+) -> bool:
+    """Persist revealed contact info and mark lookup as attempted.
+
+    Both email_attempted and phone_attempted are set in one DB write because
+    a single PDL call returns both fields — no reason to bill twice.
+
+    Args:
+        conn: Database connection.
+        name_key: The dedup key (lowercase "first_last").
+        email: Email address returned by PDL, or None if not found.
+        phone: Phone number returned by PDL, or None if not found.
+        email_attempted: True once PDL has been queried for email (success or empty).
+        phone_attempted: True once PDL has been queried for phone (success or empty).
+
+    Returns:
+        True if a row was updated, False if no matching lead found.
+    """
+    cursor = conn.execute(
+        "UPDATE leads SET email = ?, phone = ?, "
+        "email_reveal_attempted = ?, phone_reveal_attempted = ?, "
+        "updated_at = datetime('now') WHERE name_key = ?",
+        (email, phone, int(email_attempted), int(phone_attempted), name_key),
     )
     conn.commit()
     return cursor.rowcount > 0

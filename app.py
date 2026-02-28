@@ -39,8 +39,10 @@ from src.db import (
     get_lead_count,
     get_last_sync,
     update_outreach,
+    reveal_contact,
     _make_name_key,
 )
+from src.engines.contact_reveal import lookup_contact
 
 logging.basicConfig(level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)
@@ -908,6 +910,145 @@ else:
                     _row("Last Sale Date", lead.deed_date)
 
             st.markdown("<div style='height:1.25rem;'></div>", unsafe_allow_html=True)
+
+            # ── Contact Information ────────────────────────────────────────────
+            if not is_llc and lead.first_name:
+                st.markdown(
+                    '<div class="section-label">Contact Information</div>',
+                    unsafe_allow_html=True,
+                )
+                name_key = _make_name_key(lead.first_name, lead.last_name)
+                email_attempted = bool(lead.email_reveal_attempted)
+                phone_attempted = bool(lead.phone_reveal_attempted)
+
+                # Helper: copy-to-clipboard button
+                def _copy_btn(value: str, field_key: str) -> None:
+                    components.html(
+                        f"""<button onclick="navigator.clipboard.writeText('{value}')"
+                            style="background:none; border:1px solid #C8A96E; color:#C8A96E;
+                                   border-radius:4px; padding:2px 10px; cursor:pointer;
+                                   font-size:11px; letter-spacing:0.05em;">
+                            Copy
+                        </button>""",
+                        height=32,
+                        key=f"copy_{field_key}_{selected_idx}",
+                    )
+
+                # Email row
+                _ec1, _ec2 = st.columns([4, 1])
+                with _ec1:
+                    if lead.email is not None:
+                        st.markdown(
+                            f"<span style='font-size:13px; color:#E8DCC8;'>{lead.email}</span>",
+                            unsafe_allow_html=True,
+                        )
+                    elif email_attempted:
+                        st.markdown(
+                            "<span style='font-size:12px; color:#666;'>No email found</span>",
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        if st.button(
+                            "Reveal Email",
+                            type="primary",
+                            use_container_width=True,
+                            key=f"reveal_email_{selected_idx}",
+                        ):
+                            with st.spinner("Looking up contact…"):
+                                try:
+                                    result = lookup_contact(
+                                        lead.first_name,
+                                        lead.last_name,
+                                        address=lead.address,
+                                        city=lead.city,
+                                        state=lead.state,
+                                        zip_code=lead.zip_code,
+                                    )
+                                    reveal_contact(
+                                        _db,
+                                        name_key,
+                                        email=result["email"],
+                                        phone=result["phone"],
+                                        email_attempted=True,
+                                        phone_attempted=True,
+                                    )
+                                    # Update the in-memory lead by name_key so rerun reflects cache
+                                    updated = lead.model_copy(update={
+                                        "email": result["email"],
+                                        "phone": result["phone"],
+                                        "email_reveal_attempted": 1,
+                                        "phone_reveal_attempted": 1,
+                                    })
+                                    st.session_state["leads"] = [
+                                        updated if _make_name_key(l.first_name, l.last_name) == name_key else l
+                                        for l in st.session_state["leads"]
+                                    ]
+                                except ValueError as exc:
+                                    st.error(str(exc))
+                            st.rerun()
+                with _ec2:
+                    if lead.email is not None:
+                        _copy_btn(lead.email, "email")
+
+                # Phone row
+                _pc1, _pc2 = st.columns([4, 1])
+                with _pc1:
+                    if lead.phone is not None:
+                        st.markdown(
+                            f"<span style='font-size:13px; color:#E8DCC8;'>{lead.phone}</span>",
+                            unsafe_allow_html=True,
+                        )
+                    elif phone_attempted:
+                        st.markdown(
+                            "<span style='font-size:12px; color:#666;'>No phone found</span>",
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        if st.button(
+                            "Reveal Phone",
+                            type="primary",
+                            use_container_width=True,
+                            key=f"reveal_phone_{selected_idx}",
+                        ):
+                            with st.spinner("Looking up contact…"):
+                                try:
+                                    result = lookup_contact(
+                                        lead.first_name,
+                                        lead.last_name,
+                                        address=lead.address,
+                                        city=lead.city,
+                                        state=lead.state,
+                                        zip_code=lead.zip_code,
+                                    )
+                                    reveal_contact(
+                                        _db,
+                                        name_key,
+                                        email=result["email"],
+                                        phone=result["phone"],
+                                        email_attempted=True,
+                                        phone_attempted=True,
+                                    )
+                                    updated = lead.model_copy(update={
+                                        "email": result["email"],
+                                        "phone": result["phone"],
+                                        "email_reveal_attempted": 1,
+                                        "phone_reveal_attempted": 1,
+                                    })
+                                    st.session_state["leads"] = [
+                                        updated if _make_name_key(l.first_name, l.last_name) == name_key else l
+                                        for l in st.session_state["leads"]
+                                    ]
+                                except ValueError as exc:
+                                    st.error(str(exc))
+                            st.rerun()
+                with _pc2:
+                    if lead.phone is not None:
+                        _copy_btn(lead.phone, "phone")
+
+                # TODO: Before public launch, add credit cost display next to each
+                # Reveal button (e.g. "Uses 1 credit") and implement credit deduction.
+
+                st.markdown("<div style='height:1.25rem;'></div>", unsafe_allow_html=True)
 
             # Outreach section
             st.markdown('<div class="section-label">Outreach</div>', unsafe_allow_html=True)

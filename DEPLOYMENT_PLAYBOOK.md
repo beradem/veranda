@@ -114,11 +114,12 @@ drafts, and sync logs.
 
 Never commit secrets to GitHub. Each platform has its own secrets dashboard.
 
-| Variable            | Value source                        | Used by              |
-|---------------------|-------------------------------------|----------------------|
-| DATABASE_URL        | Supabase dashboard                  | src/db.py            |
-| GROQ_API_KEY        | console.groq.com → API Keys         | outreach_generator   |
-| SOCRATA_APP_TOKEN   | data.cityofnewyork.us → My Profile  | real_estate engine   |
+| Variable            | Value source                             | Used by                    |
+|---------------------|------------------------------------------|----------------------------|
+| DATABASE_URL        | Supabase dashboard                       | src/db.py                  |
+| GROQ_API_KEY        | console.groq.com → API Keys              | outreach_generator         |
+| SOCRATA_APP_TOKEN   | data.cityofnewyork.us → My Profile       | real_estate engine         |
+| PDL_API_KEY         | console.peopledatalabs.com → API Keys    | contact_reveal engine      |
 
 In Railway: Settings → Variables → add each key/value pair.
 In GitHub Actions: repo Settings → Secrets and variables → Actions → New secret.
@@ -216,6 +217,19 @@ SSL certificate is provisioned automatically by Cloudflare. Free.
 | Groq (AI)            | Pay-as-you-go | ~$5–20     |
 | GitHub Actions (sync)| Free tier     | $0         |
 | **Total**            |               | **~$10–25**|
+
+---
+
+## Pre-Launch: Contact Reveal Pricing & Credits
+
+Before making Veranda public, implement a credits system so you can monetise
+each reveal and cover the PDL API cost:
+
+- Decide the per-reveal price to charge users (PDL costs ~$0.04–$0.10/match)
+- Add a `credits` balance column to user accounts
+- Deduct 1 credit on each Reveal button click; block if balance is zero
+- Show "Uses 1 credit ($0.XX)" micro-copy next to each Reveal button in the UI
+- Add a credit purchase flow (Stripe recommended)
 
 ---
 
