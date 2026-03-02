@@ -119,7 +119,7 @@ Never commit secrets to GitHub. Each platform has its own secrets dashboard.
 | DATABASE_URL        | Supabase dashboard                       | src/db.py                  |
 | GROQ_API_KEY        | console.groq.com → API Keys              | outreach_generator         |
 | SOCRATA_APP_TOKEN   | data.cityofnewyork.us → My Profile       | real_estate engine         |
-| PDL_API_KEY         | console.peopledatalabs.com → API Keys    | contact_reveal engine      |
+| ATDATA_API_KEY      | app.atdata.com → API Keys                | contact_reveal engine      |
 
 In Railway: Settings → Variables → add each key/value pair.
 In GitHub Actions: repo Settings → Secrets and variables → Actions → New secret.
