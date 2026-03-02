@@ -68,7 +68,8 @@ def lookup_contact(
         "last": last_name,
     }
     if address:
-        params["street"] = address
+        # Strip unit/apt suffix (e.g. "511 Broadway, Unit PHW" → "511 Broadway")
+        params["street"] = address.split(",")[0].strip()
     if city:
         params["city"] = city
     if state:
