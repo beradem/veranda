@@ -1,4 +1,4 @@
-"""SQLite persistence layer for Veranda leads.
+"""Persistence layer for Veranda leads (SQLite locally, PostgreSQL on Supabase).
 
 Think of this module as a filing cabinet for all the leads Veranda discovers.
 Instead of fetching thousands of records from live APIs every time you click
@@ -7,6 +7,9 @@ Instead of fetching thousands of records from live APIs every time you click
 The database stores leads in a single table with deduplication by name — if
 the same person appears from multiple sources, we keep the record with the
 highest estimated wealth.
+
+When DATABASE_URL is set (e.g. postgresql://... from Supabase), the app uses
+PostgreSQL. Otherwise it uses SQLite (data/veranda.db) for local development.
 """
 
 import logging
@@ -14,11 +17,14 @@ import os
 import sqlite3
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from src.models.lead import Lead, LeadSource, OutreachStatus
 
 logger = logging.getLogger(__name__)
+
+# When set to "postgresql", get_connection() uses DATABASE_URL and psycopg2.
+_engine: Optional[str] = None
 
 DEFAULT_DB_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -26,6 +32,7 @@ DEFAULT_DB_PATH = os.path.join(
     "veranda.db",
 )
 
+# SQLite schema (local dev)
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS leads (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,17 +85,115 @@ CREATE TABLE IF NOT EXISTS sync_log (
 );
 """
 
+# PostgreSQL schema (Supabase / production)
+SCHEMA_PG_SQL = """
+CREATE TABLE IF NOT EXISTS leads (
+    id               SERIAL PRIMARY KEY,
+    first_name       TEXT NOT NULL,
+    last_name        TEXT NOT NULL,
+    name_key         TEXT NOT NULL,
+    city             TEXT,
+    state            TEXT,
+    zip_code         TEXT,
+    address          TEXT,
+    professional_title TEXT,
+    company          TEXT,
+    linkedin_url     TEXT,
+    email            TEXT,
+    phone            TEXT,
+    email_reveal_attempted  INTEGER NOT NULL DEFAULT 0,
+    phone_reveal_attempted  INTEGER NOT NULL DEFAULT 0,
+    estimated_wealth DOUBLE PRECISION,
+    discovery_trigger TEXT NOT NULL,
+    year_built       INTEGER,
+    num_floors       INTEGER,
+    building_area    INTEGER,
+    lot_area         INTEGER,
+    building_type    TEXT,
+    unit_number      TEXT,
+    deed_sale_amount DOUBLE PRECISION,
+    deed_date        TEXT,
+    source           TEXT NOT NULL,
+    confidence_score DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    discovered_at    TEXT NOT NULL,
+    outreach_status  TEXT NOT NULL DEFAULT 'pending',
+    outreach_draft   TEXT,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 
-def get_connection(db_path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
-    """Open a SQLite connection with row factory enabled.
+CREATE INDEX IF NOT EXISTS idx_leads_name_key ON leads(name_key);
+CREATE INDEX IF NOT EXISTS idx_leads_zip_code ON leads(zip_code);
+CREATE INDEX IF NOT EXISTS idx_leads_source ON leads(source);
+CREATE INDEX IF NOT EXISTS idx_leads_estimated_wealth ON leads(estimated_wealth);
+
+CREATE TABLE IF NOT EXISTS sync_log (
+    id              SERIAL PRIMARY KEY,
+    started_at      TEXT NOT NULL,
+    completed_at    TEXT,
+    records_synced  INTEGER DEFAULT 0,
+    source          TEXT,
+    status          TEXT NOT NULL DEFAULT 'running',
+    error_message   TEXT
+);
+"""
+
+
+def _is_postgresql() -> bool:
+    """True if the app is configured to use PostgreSQL (DATABASE_URL)."""
+    global _engine
+    if _engine is not None:
+        return _engine == "postgresql"
+    url = os.environ.get("DATABASE_URL", "").strip()
+    if url and url.startswith("postgresql"):
+        _engine = "postgresql"
+        return True
+    _engine = "sqlite"
+    return False
+
+
+def _placeholder_query(query: str) -> str:
+    """Convert %s placeholders to ? for SQLite so one query style works for both."""
+    if _engine == "postgresql":
+        return query
+    return query.replace("%s", "?")
+
+
+def _cursor(conn: Any):
+    """Return a cursor that yields dict-like rows (Row for SQLite, RealDictCursor for PG)."""
+    if _engine == "postgresql":
+        import psycopg2.extras
+        return conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    return conn.cursor()
+
+
+def get_connection(db_path: str = DEFAULT_DB_PATH) -> Any:
+    """Open a database connection (SQLite or PostgreSQL).
+
+    If the environment variable DATABASE_URL is set and starts with "postgresql",
+    connects to that database (e.g. Supabase). Otherwise uses SQLite at db_path.
+    Passing ":memory:" forces SQLite (for tests) and ignores DATABASE_URL.
 
     Args:
-        db_path: Path to the database file. Defaults to data/veranda.db.
-                 Use ":memory:" for in-memory databases (tests).
+        db_path: Path to the SQLite file. Used only when not using DATABASE_URL.
+                 Defaults to data/veranda.db. Use ":memory:" for tests.
 
     Returns:
-        A sqlite3.Connection with Row factory so columns are accessible by name.
+        A connection with .cursor(), .commit(), .rollback(). Cursors return
+        dict-like rows (row["column_name"]).
     """
+    global _engine
+    if db_path == ":memory:":
+        _engine = "sqlite"
+    else:
+        url = os.environ.get("DATABASE_URL", "").strip()
+        if url and url.startswith("postgresql"):
+            import psycopg2
+            _engine = "postgresql"
+            conn = psycopg2.connect(url)
+            conn.autocommit = False
+            return conn
+        _engine = "sqlite"
     if db_path != ":memory:":
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
@@ -97,8 +202,8 @@ def get_connection(db_path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
     return conn
 
 
-def _migrate_db(conn: sqlite3.Connection) -> None:
-    """Add any columns that exist in the schema but not in the live table.
+def _migrate_db_sqlite(conn: sqlite3.Connection) -> None:
+    """Add any columns that exist in the schema but not in the live table (SQLite only).
 
     SQLite's CREATE TABLE IF NOT EXISTS won't add new columns to an existing
     table, so this function uses PRAGMA table_info to detect missing columns
@@ -116,13 +221,25 @@ def _migrate_db(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def init_db(conn: sqlite3.Connection) -> None:
+def init_db(conn: Any) -> None:
     """Create tables and indexes if they don't exist.
 
-    This is idempotent — safe to call every time the app starts.
+    Uses PostgreSQL schema when DATABASE_URL is set, otherwise SQLite.
+    Idempotent — safe to call every time the app starts.
     """
-    conn.executescript(SCHEMA_SQL)
-    _migrate_db(conn)
+    if _engine == "postgresql":
+        cur = _cursor(conn)
+        try:
+            for stmt in SCHEMA_PG_SQL.strip().split(";"):
+                stmt = stmt.strip()
+                if stmt:
+                    cur.execute(stmt)
+        finally:
+            cur.close()
+        conn.commit()
+    else:
+        conn.executescript(SCHEMA_SQL)
+        _migrate_db_sqlite(conn)
     logger.info("Database schema initialized")
 
 
@@ -131,11 +248,11 @@ def _make_name_key(first_name: str, last_name: str) -> str:
     return f"{first_name}_{last_name}".lower().strip("_")
 
 
-def _safe_get(row: sqlite3.Row, key: str):
+def _safe_get(row: Any, key: str):
     """Return row[key] or None if the column doesn't exist (pre-migration rows)."""
     try:
         return row[key]
-    except IndexError:
+    except (IndexError, KeyError):
         return None
 
 
@@ -174,7 +291,7 @@ def _lead_to_row(lead: Lead) -> dict:
     }
 
 
-def _row_to_lead(row: sqlite3.Row) -> Lead:
+def _row_to_lead(row: Any) -> Lead:
     """Convert a DB row back into a Lead model."""
     return Lead(
         first_name=row["first_name"],
@@ -208,7 +325,12 @@ def _row_to_lead(row: sqlite3.Row) -> Lead:
     )
 
 
-def save_leads(conn: sqlite3.Connection, leads: list[Lead]) -> int:
+def _sql_now() -> str:
+    """Expression for current timestamp in SQL (backend-specific)."""
+    return "CURRENT_TIMESTAMP" if _engine == "postgresql" else "datetime('now')"
+
+
+def save_leads(conn: Any, leads: list[Lead]) -> int:
     """Save leads to the database with deduplication.
 
     For each lead, we compute a name_key (lowercase "first_last"). If a row
@@ -223,52 +345,52 @@ def save_leads(conn: sqlite3.Connection, leads: list[Lead]) -> int:
         Number of leads inserted or updated.
     """
     saved = 0
-    cursor = conn.cursor()
+    cur = _cursor(conn)
+    now = _sql_now()
 
     try:
         for lead in leads:
             row = _lead_to_row(lead)
             name_key = row["name_key"]
 
-            existing = cursor.execute(
-                "SELECT id, estimated_wealth FROM leads WHERE name_key = ?",
-                (name_key,),
-            ).fetchone()
+            q = _placeholder_query("SELECT id, estimated_wealth FROM leads WHERE name_key = %s")
+            cur.execute(q, (name_key,))
+            existing = cur.fetchone()
 
             if existing is None:
                 columns = ", ".join(row.keys())
-                placeholders = ", ".join(f":{k}" for k in row.keys())
-                cursor.execute(
-                    f"INSERT INTO leads ({columns}) VALUES ({placeholders})",
-                    row,
+                placeholders = ", ".join("%s" for _ in row)
+                q = _placeholder_query(
+                    f"INSERT INTO leads ({columns}) VALUES ({placeholders})"
                 )
+                cur.execute(q, list(row.values()))
                 saved += 1
             else:
                 incoming_wealth = row["estimated_wealth"] or 0
                 existing_wealth = existing["estimated_wealth"] or 0
                 if incoming_wealth > existing_wealth:
-                    set_clause = ", ".join(
-                        f"{k} = :{k}" for k in row.keys() if k != "name_key"
+                    keys = [k for k in row.keys() if k != "name_key"]
+                    set_clause = ", ".join(f"{k} = %s" for k in keys)
+                    q = _placeholder_query(
+                        f"UPDATE leads SET {set_clause}, updated_at = {now} WHERE id = %s"
                     )
-                    row["_id"] = existing["id"]
-                    cursor.execute(
-                        f"UPDATE leads SET {set_clause}, updated_at = datetime('now') "
-                        f"WHERE id = :_id",
-                        row,
-                    )
+                    values = [row[k] for k in keys] + [existing["id"]]
+                    cur.execute(q, values)
                     saved += 1
 
         conn.commit()
     except Exception:
         conn.rollback()
         raise
+    finally:
+        cur.close()
 
     logger.info("Saved %d leads (of %d total)", saved, len(leads))
     return saved
 
 
 def query_leads(
-    conn: sqlite3.Connection,
+    conn: Any,
     zip_codes: Optional[list[str]] = None,
     min_value: float = 0,
     max_value: Optional[float] = None,
@@ -294,24 +416,28 @@ def query_leads(
     params: list = []
 
     if zip_codes:
-        placeholders = ", ".join("?" for _ in zip_codes)
-        conditions.append(f"zip_code IN ({placeholders})")
+        ph = ", ".join("%s" for _ in zip_codes)
+        conditions.append(f"zip_code IN ({ph})")
         params.extend(zip_codes)
 
     if min_value > 0:
-        conditions.append("estimated_wealth >= ?")
+        conditions.append("estimated_wealth >= %s")
         params.append(min_value)
 
     if max_value is not None:
-        conditions.append("estimated_wealth < ?")
+        conditions.append("estimated_wealth < %s")
         params.append(max_value)
 
     # Exclude any lead whose first or last name contains a digit
-    conditions.append("first_name NOT GLOB '*[0-9]*'")
-    conditions.append("last_name NOT GLOB '*[0-9]*'")
+    if _engine == "postgresql":
+        conditions.append("first_name !~ '[0-9]'")
+        conditions.append("last_name !~ '[0-9]'")
+    else:
+        conditions.append("first_name NOT GLOB '*[0-9]*'")
+        conditions.append("last_name NOT GLOB '*[0-9]*'")
 
     if residential_only:
-        conditions.append("source = ?")
+        conditions.append("source = %s")
         params.append(LeadSource.TAX_ASSESSOR.value)
 
     if individuals_only:
@@ -319,70 +445,101 @@ def query_leads(
 
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
     limit_clause = f"LIMIT {limit}" if limit else ""
-
-    rows = conn.execute(
-        f"SELECT * FROM leads {where} ORDER BY estimated_wealth DESC {limit_clause}",
-        params,
-    ).fetchall()
-
+    q = _placeholder_query(
+        f"SELECT * FROM leads {where} ORDER BY estimated_wealth DESC {limit_clause}"
+    )
+    cur = _cursor(conn)
+    try:
+        cur.execute(q, params)
+        rows = cur.fetchall()
+    finally:
+        cur.close()
     return [_row_to_lead(row) for row in rows]
 
 
-def get_lead_count(conn: sqlite3.Connection) -> int:
+def get_lead_count(conn: Any) -> int:
     """Return total number of leads in the database."""
-    result = conn.execute("SELECT COUNT(*) as cnt FROM leads").fetchone()
-    return result["cnt"]
+    q = _placeholder_query("SELECT COUNT(*) as cnt FROM leads")
+    cur = _cursor(conn)
+    try:
+        cur.execute(q)
+        result = cur.fetchone()
+        return result["cnt"]
+    finally:
+        cur.close()
 
 
-def get_last_sync(conn: sqlite3.Connection) -> Optional[str]:
+def get_last_sync(conn: Any) -> Optional[str]:
     """Return the timestamp of the most recent completed sync, or None."""
-    row = conn.execute(
+    q = _placeholder_query(
         "SELECT completed_at FROM sync_log "
-        "WHERE status = 'completed' "
-        "ORDER BY completed_at DESC LIMIT 1"
-    ).fetchone()
-    return row["completed_at"] if row else None
+        "WHERE status = %s ORDER BY completed_at DESC LIMIT 1"
+    )
+    cur = _cursor(conn)
+    try:
+        cur.execute(q, ("completed",))
+        row = cur.fetchone()
+        return row["completed_at"] if row else None
+    finally:
+        cur.close()
 
 
-def start_sync_log(
-    conn: sqlite3.Connection, source: Optional[str] = None
-) -> int:
+def start_sync_log(conn: Any, source: Optional[str] = None) -> int:
     """Record the start of a sync run.
 
     Returns:
         The sync log ID for later updates.
     """
-    cursor = conn.execute(
-        "INSERT INTO sync_log (started_at, source, status) VALUES (?, ?, 'running')",
-        (datetime.utcnow().isoformat(), source),
-    )
-    conn.commit()
-    return cursor.lastrowid
+    cur = _cursor(conn)
+    try:
+        if _engine == "postgresql":
+            q = _placeholder_query(
+                "INSERT INTO sync_log (started_at, source, status) VALUES (%s, %s, 'running') RETURNING id"
+            )
+            cur.execute(q, (datetime.utcnow().isoformat(), source))
+            sync_id = int(cur.fetchone()["id"])
+        else:
+            q = _placeholder_query(
+                "INSERT INTO sync_log (started_at, source, status) VALUES (%s, %s, 'running')"
+            )
+            cur.execute(q, (datetime.utcnow().isoformat(), source))
+            sync_id = cur.lastrowid
+        conn.commit()
+        return sync_id
+    finally:
+        cur.close()
 
 
 def complete_sync_log(
-    conn: sqlite3.Connection,
+    conn: Any,
     sync_id: int,
     records_synced: int,
     status: str = "completed",
     error_message: Optional[str] = None,
 ) -> None:
     """Record the end of a sync run."""
-    conn.execute(
-        "UPDATE sync_log SET completed_at = ?, records_synced = ?, "
-        "status = ?, error_message = ? WHERE id = ?",
-        (
-            datetime.utcnow().isoformat(),
-            records_synced,
-            status,
-            error_message,
-            sync_id,
-        ),
+    q = _placeholder_query(
+        "UPDATE sync_log SET completed_at = %s, records_synced = %s, "
+        "status = %s, error_message = %s WHERE id = %s"
     )
-    conn.commit()
+    cur = _cursor(conn)
+    try:
+        cur.execute(
+            q,
+            (
+                datetime.utcnow().isoformat(),
+                records_synced,
+                status,
+                error_message,
+                sync_id,
+            ),
+        )
+        conn.commit()
+    finally:
+        cur.close()
 
 
-def clear_leads(conn: sqlite3.Connection) -> int:
+def clear_leads(conn: Any) -> int:
     """Delete all rows from the leads table.
 
     Use this to force a fresh live pull next time Generate Leads is clicked.
@@ -390,14 +547,19 @@ def clear_leads(conn: sqlite3.Connection) -> int:
     Returns:
         Number of rows deleted.
     """
-    cursor = conn.execute("DELETE FROM leads")
-    conn.commit()
-    logger.info("Cleared %d leads from database", cursor.rowcount)
-    return cursor.rowcount
+    q = _placeholder_query("DELETE FROM leads")
+    cur = _cursor(conn)
+    try:
+        cur.execute(q)
+        conn.commit()
+        logger.info("Cleared %d leads from database", cur.rowcount)
+        return cur.rowcount
+    finally:
+        cur.close()
 
 
 def update_outreach(
-    conn: sqlite3.Connection,
+    conn: Any,
     name_key: str,
     status: str,
     draft: Optional[str] = None,
@@ -413,17 +575,21 @@ def update_outreach(
     Returns:
         True if a row was updated, False if no matching lead found.
     """
-    cursor = conn.execute(
-        "UPDATE leads SET outreach_status = ?, outreach_draft = ?, "
-        "updated_at = datetime('now') WHERE name_key = ?",
-        (status, draft, name_key),
+    now = _sql_now()
+    q = _placeholder_query(
+        f"UPDATE leads SET outreach_status = %s, outreach_draft = %s, updated_at = {now} WHERE name_key = %s"
     )
-    conn.commit()
-    return cursor.rowcount > 0
+    cur = _cursor(conn)
+    try:
+        cur.execute(q, (status, draft, name_key))
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        cur.close()
 
 
 def reveal_contact(
-    conn: sqlite3.Connection,
+    conn: Any,
     name_key: str,
     email: Optional[str],
     phone: Optional[str],
@@ -446,11 +612,19 @@ def reveal_contact(
     Returns:
         True if a row was updated, False if no matching lead found.
     """
-    cursor = conn.execute(
-        "UPDATE leads SET email = ?, phone = ?, "
-        "email_reveal_attempted = ?, phone_reveal_attempted = ?, "
-        "updated_at = datetime('now') WHERE name_key = ?",
-        (email, phone, int(email_attempted), int(phone_attempted), name_key),
+    now = _sql_now()
+    q = _placeholder_query(
+        f"UPDATE leads SET email = %s, phone = %s, "
+        "email_reveal_attempted = %s, phone_reveal_attempted = %s, "
+        f"updated_at = {now} WHERE name_key = %s"
     )
-    conn.commit()
-    return cursor.rowcount > 0
+    cur = _cursor(conn)
+    try:
+        cur.execute(
+            q,
+            (email, phone, int(email_attempted), int(phone_attempted), name_key),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        cur.close()
