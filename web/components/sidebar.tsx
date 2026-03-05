@@ -62,24 +62,24 @@ export function Sidebar({ onSearch, onReset, isLoading }: SidebarProps) {
       className="fixed left-0 top-0 h-screen w-84 flex flex-col overflow-hidden z-10"
       style={{
         width: "21rem",
-        backgroundColor: "#0F0F14",
-        borderRight: "1px solid #252530",
+        backgroundColor: "var(--surface)",
+        borderRight: "1px solid var(--border)",
       }}
     >
       {/* Brand */}
-      <div className="px-6 pt-6 pb-4" style={{ borderBottom: "1px solid #252530" }}>
+      <div className="px-6 pt-6 pb-4" style={{ borderBottom: "1px solid var(--border)" }}>
         <button
           onClick={onReset}
           className="text-2xl tracking-[0.2em] uppercase font-normal text-left transition-colors"
-          style={{ fontFamily: "'Playfair Display', Georgia, serif", color: "#EDE8E0", background: "none", border: "none", cursor: "pointer", padding: 0 }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = "#C8A96E")}
-          onMouseLeave={(e) => (e.currentTarget.style.color = "#EDE8E0")}
+          style={{ fontFamily: "'Playfair Display', Georgia, serif", color: "var(--text)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = "var(--gold)")}
+          onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text)")}
         >
           Veranda
         </button>
         <div
           className="text-[10px] tracking-[0.25em] uppercase mt-1"
-          style={{ color: "#7A7570" }}
+          style={{ color: "var(--text-dim)" }}
         >
           NYC Intelligence Platform
         </div>
@@ -89,23 +89,23 @@ export function Sidebar({ onSearch, onReset, isLoading }: SidebarProps) {
           <div>
             <div
               className="text-xl font-light"
-              style={{ color: "#C8A96E" }}
+              style={{ color: "var(--gold)" }}
             >
               {stats.leadCount.toLocaleString()}
             </div>
-            <div className="text-[9px] tracking-[0.15em] uppercase" style={{ color: "#4A4845" }}>
+            <div className="text-[9px] tracking-[0.15em] uppercase" style={{ color: "var(--text-muted)" }}>
               Leads
             </div>
           </div>
           <div
             className="h-8 w-px"
-            style={{ backgroundColor: "#252530" }}
+            style={{ backgroundColor: "var(--border)" }}
           />
           <div>
-            <div className="text-xs" style={{ color: "#EDE8E0" }}>
+            <div className="text-xs" style={{ color: "var(--text)" }}>
               {stats.lastSync ? formatDate(stats.lastSync) : "Never"}
             </div>
-            <div className="text-[9px] tracking-[0.15em] uppercase" style={{ color: "#4A4845" }}>
+            <div className="text-[9px] tracking-[0.15em] uppercase" style={{ color: "var(--text-muted)" }}>
               Last sync
             </div>
           </div>
@@ -113,10 +113,10 @@ export function Sidebar({ onSearch, onReset, isLoading }: SidebarProps) {
       </div>
 
       {/* Service description */}
-      <div className="px-6 py-4" style={{ borderBottom: "1px solid #252530" }}>
+      <div className="px-6 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
         <label
           className="block text-[10px] tracking-[0.2em] uppercase mb-2"
-          style={{ color: "#7A7570" }}
+          style={{ color: "var(--text-dim)" }}
         >
           Service Description
         </label>
@@ -127,17 +127,17 @@ export function Sidebar({ onSearch, onReset, isLoading }: SidebarProps) {
           rows={4}
           className="w-full text-xs resize-none rounded px-3 py-2 outline-none transition-colors"
           style={{
-            backgroundColor: "#16161C",
-            border: "1px solid #252530",
-            color: "#EDE8E0",
+            backgroundColor: "var(--card)",
+            border: "1px solid var(--border)",
+            color: "var(--text)",
             fontFamily: "'Inter', system-ui, sans-serif",
             lineHeight: "1.6",
           }}
           onFocus={(e) => {
-            e.currentTarget.style.borderColor = "#7A6535";
+            e.currentTarget.style.borderColor = "var(--gold-dim)";
           }}
           onBlur={(e) => {
-            e.currentTarget.style.borderColor = "#252530";
+            e.currentTarget.style.borderColor = "var(--border)";
           }}
         />
       </div>
@@ -147,30 +147,30 @@ export function Sidebar({ onSearch, onReset, isLoading }: SidebarProps) {
         <div className="flex items-center justify-between mb-2">
           <label
             className="text-[10px] tracking-[0.2em] uppercase"
-            style={{ color: "#7A7570" }}
+            style={{ color: "var(--text-dim)" }}
           >
             Neighborhoods{" "}
             {selectedNeighborhoods.size > 0 && (
-              <span style={{ color: "#C8A96E" }}>({selectedNeighborhoods.size})</span>
+              <span style={{ color: "var(--gold)" }}>({selectedNeighborhoods.size})</span>
             )}
           </label>
           <div className="flex gap-2">
             <button
               onClick={selectAll}
               className="text-[9px] tracking-[0.1em] uppercase transition-colors"
-              style={{ color: "#7A6535" }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = "#C8A96E")}
-              onMouseLeave={(e) => (e.currentTarget.style.color = "#7A6535")}
+              style={{ color: "var(--gold-dim)" }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "var(--gold)")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "var(--gold-dim)")}
             >
               All
             </button>
-            <span style={{ color: "#252530" }}>·</span>
+            <span style={{ color: "var(--border)" }}>·</span>
             <button
               onClick={clearAll}
               className="text-[9px] tracking-[0.1em] uppercase transition-colors"
-              style={{ color: "#7A6535" }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = "#C8A96E")}
-              onMouseLeave={(e) => (e.currentTarget.style.color = "#7A6535")}
+              style={{ color: "var(--gold-dim)" }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "var(--gold)")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "var(--gold-dim)")}
             >
               Clear
             </button>
@@ -185,9 +185,9 @@ export function Sidebar({ onSearch, onReset, isLoading }: SidebarProps) {
           placeholder="Filter neighborhoods..."
           className="w-full text-xs rounded px-3 py-1.5 mb-2 outline-none"
           style={{
-            backgroundColor: "#16161C",
-            border: "1px solid #252530",
-            color: "#EDE8E0",
+            backgroundColor: "var(--card)",
+            border: "1px solid var(--border)",
+            color: "var(--text)",
           }}
         />
 
@@ -199,16 +199,16 @@ export function Sidebar({ onSearch, onReset, isLoading }: SidebarProps) {
               className="flex items-center gap-2.5 px-2 py-1.5 rounded cursor-pointer transition-colors"
               style={{
                 backgroundColor: selectedNeighborhoods.has(name)
-                  ? "rgba(200,169,110,0.08)"
+                  ? "var(--gold-bg)"
                   : "transparent",
               }}
               onMouseEnter={(e) => {
                 if (!selectedNeighborhoods.has(name))
-                  e.currentTarget.style.backgroundColor = "#1D1D26";
+                  e.currentTarget.style.backgroundColor = "var(--hover)";
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = selectedNeighborhoods.has(name)
-                  ? "rgba(200,169,110,0.08)"
+                  ? "var(--gold-bg)"
                   : "transparent";
               }}
             >
@@ -222,10 +222,10 @@ export function Sidebar({ onSearch, onReset, isLoading }: SidebarProps) {
                 className="w-3.5 h-3.5 rounded-sm flex items-center justify-center flex-shrink-0"
                 style={{
                   border: selectedNeighborhoods.has(name)
-                    ? "1px solid #C8A96E"
-                    : "1px solid #3A3A45",
+                    ? "1px solid var(--gold)"
+                    : "1px solid var(--border-strong)",
                   backgroundColor: selectedNeighborhoods.has(name)
-                    ? "#C8A96E"
+                    ? "var(--gold)"
                     : "transparent",
                 }}
               >
@@ -241,7 +241,7 @@ export function Sidebar({ onSearch, onReset, isLoading }: SidebarProps) {
                   </svg>
                 )}
               </div>
-              <span className="text-xs" style={{ color: "#EDE8E0" }}>
+              <span className="text-xs" style={{ color: "var(--text)" }}>
                 {name}
               </span>
             </label>
@@ -250,13 +250,13 @@ export function Sidebar({ onSearch, onReset, isLoading }: SidebarProps) {
       </div>
 
       {/* Search button */}
-      <div className="px-6 py-4" style={{ borderTop: "1px solid #252530" }}>
+      <div className="px-6 py-4" style={{ borderTop: "1px solid var(--border)" }}>
         <button
           onClick={handleSearch}
           disabled={isLoading}
           className="w-full py-2.5 text-xs tracking-[0.2em] uppercase font-medium rounded transition-all"
           style={{
-            backgroundColor: isLoading ? "#7A6535" : "#C8A96E",
+            backgroundColor: isLoading ? "var(--gold-dim)" : "var(--gold)",
             color: "#0C0C0F",
             opacity: isLoading ? 0.7 : 1,
             cursor: isLoading ? "not-allowed" : "pointer",

@@ -49,10 +49,10 @@ export function LeadTable({
         accessorFn: (row) => `${row.first_name} ${row.last_name}`,
         cell: ({ row }) => (
           <div>
-            <div className="text-sm font-medium" style={{ color: "#EDE8E0" }}>
+            <div className="text-sm font-medium" style={{ color: "var(--text)" }}>
               {row.original.first_name} {row.original.last_name}
             </div>
-            <div className="text-xs mt-0.5 truncate max-w-xs" style={{ color: "#7A7570" }}>
+            <div className="text-xs mt-0.5 truncate max-w-xs" style={{ color: "var(--text-muted)" }}>
               {leadSubtitle(row.original)}
             </div>
           </div>
@@ -65,10 +65,10 @@ export function LeadTable({
         accessorFn: (row) => `${row.address ?? ""} ${row.building_type ?? ""}`,
         cell: ({ row }) => (
           <div>
-            <div className="text-xs" style={{ color: "#EDE8E0" }}>
+            <div className="text-xs" style={{ color: "var(--text)" }}>
               {zipToNeighborhood(row.original.zip_code)}
             </div>
-            <div className="text-xs mt-0.5" style={{ color: "#7A7570" }}>
+            <div className="text-xs mt-0.5" style={{ color: "var(--text-dim)" }}>
               {row.original.address ?? ""}
             </div>
           </div>
@@ -96,11 +96,11 @@ export function LeadTable({
   return (
     <div className="flex flex-col h-full">
       {/* Search bar */}
-      <div className="flex items-center gap-3 px-4 py-3" style={{ borderBottom: "1px solid #252530" }}>
+      <div className="flex items-center gap-3 px-4 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
         <div className="relative flex-1">
           <svg
             className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5"
-            style={{ color: "#7A7570" }}
+            style={{ color: "var(--text-dim)" }}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -119,13 +119,13 @@ export function LeadTable({
             placeholder="Filter by name, address, company…"
             className="w-full text-xs pl-9 pr-3 py-1.5 rounded outline-none"
             style={{
-              backgroundColor: "#16161C",
-              border: "1px solid #252530",
-              color: "#EDE8E0",
+              backgroundColor: "var(--card)",
+              border: "1px solid var(--border)",
+              color: "var(--text)",
             }}
           />
         </div>
-        <span className="text-xs whitespace-nowrap" style={{ color: "#7A7570" }}>
+        <span className="text-xs whitespace-nowrap" style={{ color: "var(--text-dim)" }}>
           {total.toLocaleString()} leads
         </span>
       </div>
@@ -133,7 +133,7 @@ export function LeadTable({
       {/* Table */}
       <div className="flex-1 overflow-auto">
         <table className="w-full">
-          <thead className="sticky top-0" style={{ backgroundColor: "#111115" }}>
+          <thead className="sticky top-0" style={{ backgroundColor: "var(--surface)" }}>
             <tr>
               {table.getHeaderGroups().map((hg) =>
                 hg.headers.map((header) => (
@@ -141,8 +141,8 @@ export function LeadTable({
                     key={header.id}
                     className="text-left px-4 py-2.5 text-[10px] tracking-[0.15em] uppercase font-semibold cursor-pointer select-none"
                     style={{
-                      color: "#7A7570",
-                      borderBottom: "1px solid #252530",
+                      color: "var(--text-dim)",
+                      borderBottom: "1px solid var(--border)",
                       whiteSpace: "nowrap",
                     }}
                     onClick={header.column.getToggleSortingHandler()}
@@ -164,19 +164,17 @@ export function LeadTable({
                   onClick={() => onSelectLead(row.original)}
                   className="cursor-pointer transition-colors"
                   style={{
-                    backgroundColor: isSelected
-                      ? "rgba(200,169,110,0.07)"
-                      : "transparent",
+                    backgroundColor: isSelected ? "var(--gold-bg)" : "transparent",
                     borderLeft: isSelected
-                      ? "2px solid #C8A96E"
+                      ? "2px solid var(--gold)"
                       : "2px solid transparent",
                   }}
                   onMouseEnter={(e) => {
-                    if (!isSelected) e.currentTarget.style.backgroundColor = "#1D1D26";
+                    if (!isSelected) e.currentTarget.style.backgroundColor = "var(--hover)";
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.backgroundColor = isSelected
-                      ? "rgba(200,169,110,0.07)"
+                      ? "var(--gold-bg)"
                       : "transparent";
                   }}
                 >
@@ -184,7 +182,7 @@ export function LeadTable({
                     <td
                       key={cell.id}
                       className="px-4 py-3"
-                      style={{ borderBottom: "1px solid #1A1A22" }}
+                      style={{ borderBottom: "1px solid var(--border-subtle)" }}
                     >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
@@ -197,7 +195,7 @@ export function LeadTable({
 
         {leads.length === 0 && (
           <div className="flex items-center justify-center h-48">
-            <span className="text-sm" style={{ color: "#4A4845" }}>
+            <span className="text-sm" style={{ color: "var(--text-muted)" }}>
               No leads found
             </span>
           </div>
@@ -208,22 +206,22 @@ export function LeadTable({
       {totalPages > 1 && (
         <div
           className="flex items-center justify-between px-4 py-3"
-          style={{ borderTop: "1px solid #252530" }}
+          style={{ borderTop: "1px solid var(--border)" }}
         >
           <button
             onClick={() => onPageChange(page - 1)}
             disabled={page <= 1}
             className="text-xs px-3 py-1.5 rounded transition-colors"
             style={{
-              backgroundColor: "#16161C",
-              border: "1px solid #252530",
-              color: page <= 1 ? "#4A4845" : "#EDE8E0",
+              backgroundColor: "var(--card)",
+              border: "1px solid var(--border)",
+              color: page <= 1 ? "var(--text-muted)" : "var(--text)",
               cursor: page <= 1 ? "not-allowed" : "pointer",
             }}
           >
             ← Prev
           </button>
-          <span className="text-xs" style={{ color: "#7A7570" }}>
+          <span className="text-xs" style={{ color: "var(--text-dim)" }}>
             Page {page} of {totalPages}
           </span>
           <button
@@ -231,9 +229,9 @@ export function LeadTable({
             disabled={page >= totalPages}
             className="text-xs px-3 py-1.5 rounded transition-colors"
             style={{
-              backgroundColor: "#16161C",
-              border: "1px solid #252530",
-              color: page >= totalPages ? "#4A4845" : "#EDE8E0",
+              backgroundColor: "var(--card)",
+              border: "1px solid var(--border)",
+              color: page >= totalPages ? "var(--text-muted)" : "var(--text)",
               cursor: page >= totalPages ? "not-allowed" : "pointer",
             }}
           >

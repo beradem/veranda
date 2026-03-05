@@ -29,14 +29,14 @@ interface DetailPanelProps {
 function DataRow({ label, value }: { label: string; value: string | null | undefined }) {
   if (!value) return null;
   return (
-    <div className="flex items-start gap-3 py-2" style={{ borderBottom: "1px solid #1A1A22" }}>
+    <div className="flex items-start gap-3 py-2" style={{ borderBottom: "1px solid var(--border-subtle)" }}>
       <span
         className="text-[10px] tracking-[0.1em] uppercase flex-shrink-0 w-24 pt-0.5"
-        style={{ color: "#7A7570" }}
+        style={{ color: "var(--text-dim)" }}
       >
         {label}
       </span>
-      <span className="text-xs" style={{ color: "#EDE8E0" }}>
+      <span className="text-xs" style={{ color: "var(--text)" }}>
         {value}
       </span>
     </div>
@@ -92,26 +92,26 @@ export function DetailPanel({
       className="fixed right-0 top-0 h-screen flex flex-col overflow-hidden"
       style={{
         width: "22rem",
-        backgroundColor: "#111115",
-        borderLeft: "1px solid #252530",
+        backgroundColor: "var(--surface)",
+        borderLeft: "1px solid var(--border)",
       }}
     >
       {/* Header */}
-      <div className="px-5 pt-5 pb-4" style={{ borderBottom: "1px solid #252530" }}>
+      <div className="px-5 pt-5 pb-4" style={{ borderBottom: "1px solid var(--border)" }}>
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
             <h2
               className="text-xl font-normal leading-tight"
               style={{
                 fontFamily: "'Playfair Display', Georgia, serif",
-                color: "#EDE8E0",
+                color: "var(--text)",
               }}
             >
               {lead.first_name} {lead.last_name}
             </h2>
             <p
               className="text-xs mt-1 truncate"
-              style={{ color: "#C8A96E" }}
+              style={{ color: "var(--gold)" }}
               title={lead.discovery_trigger}
             >
               {lead.discovery_trigger}
@@ -120,9 +120,9 @@ export function DetailPanel({
           <button
             onClick={onClose}
             className="ml-3 flex-shrink-0 w-7 h-7 flex items-center justify-center rounded transition-colors"
-            style={{ color: "#7A7570" }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = "#EDE8E0")}
-            onMouseLeave={(e) => (e.currentTarget.style.color = "#7A7570")}
+            style={{ color: "var(--text-dim)" }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text)")}
+            onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-dim)")}
           >
             ✕
           </button>
@@ -136,7 +136,7 @@ export function DetailPanel({
             {sourceLabel(lead.source)}
           </span>
           {lead.estimated_wealth && (
-            <span className="text-xs font-medium" style={{ color: "#C8A96E" }}>
+            <span className="text-xs font-medium" style={{ color: "var(--gold)" }}>
               {formatCurrency(lead.estimated_wealth)}
             </span>
           )}
@@ -149,7 +149,7 @@ export function DetailPanel({
         <section className="mb-6">
           <div
             className="text-[10px] tracking-[0.2em] uppercase mb-3"
-            style={{ color: "#7A7570" }}
+            style={{ color: "var(--text-dim)" }}
           >
             Property Details
           </div>
@@ -172,7 +172,7 @@ export function DetailPanel({
           <section className="mb-6">
             <div
               className="text-[10px] tracking-[0.2em] uppercase mb-3"
-              style={{ color: "#7A7570" }}
+              style={{ color: "var(--text-dim)" }}
             >
               Professional
             </div>
@@ -186,7 +186,7 @@ export function DetailPanel({
           <section className="mb-6">
             <div
               className="text-[10px] tracking-[0.2em] uppercase mb-3"
-              style={{ color: "#7A7570" }}
+              style={{ color: "var(--text-dim)" }}
             >
               Contact
             </div>
@@ -199,7 +199,7 @@ export function DetailPanel({
         <section className="mb-6">
           <div
             className="text-[10px] tracking-[0.2em] uppercase mb-3"
-            style={{ color: "#7A7570" }}
+            style={{ color: "var(--text-dim)" }}
           >
             Research
           </div>
@@ -218,17 +218,17 @@ export function DetailPanel({
                 rel="noopener noreferrer"
                 className="text-[10px] tracking-[0.1em] uppercase px-3 py-1.5 rounded transition-colors"
                 style={{
-                  backgroundColor: "#16161C",
-                  border: "1px solid #252530",
-                  color: "#7A7570",
+                  backgroundColor: "var(--card)",
+                  border: "1px solid var(--border)",
+                  color: "var(--text-dim)",
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = "#7A6535";
-                  e.currentTarget.style.color = "#C8A96E";
+                  e.currentTarget.style.borderColor = "var(--gold-dim)";
+                  e.currentTarget.style.color = "var(--gold)";
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.borderColor = "#252530";
-                  e.currentTarget.style.color = "#7A7570";
+                  e.currentTarget.style.borderColor = "var(--border)";
+                  e.currentTarget.style.color = "var(--text-dim)";
                 }}
               >
                 {label} ↗
@@ -241,7 +241,7 @@ export function DetailPanel({
         <section>
           <div
             className="text-[10px] tracking-[0.2em] uppercase mb-3"
-            style={{ color: "#7A7570" }}
+            style={{ color: "var(--text-dim)" }}
           >
             Outreach Draft
           </div>
@@ -254,9 +254,9 @@ export function DetailPanel({
                 rows={6}
                 className="w-full text-xs rounded px-3 py-2.5 resize-none outline-none"
                 style={{
-                  backgroundColor: "#16161C",
-                  border: "1px solid #7A6535",
-                  color: "#EDE8E0",
+                  backgroundColor: "var(--card)",
+                  border: "1px solid var(--gold-dim)",
+                  color: "var(--text)",
                   lineHeight: "1.7",
                 }}
               />
@@ -264,9 +264,9 @@ export function DetailPanel({
                 onClick={generateOutreach}
                 disabled={isGenerating}
                 className="mt-2 text-[10px] tracking-[0.1em] uppercase px-3 py-1.5 rounded transition-colors"
-                style={{ color: "#7A6535", cursor: "pointer" }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = "#C8A96E")}
-                onMouseLeave={(e) => (e.currentTarget.style.color = "#7A6535")}
+                style={{ color: "var(--gold-dim)", cursor: "pointer" }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "var(--gold)")}
+                onMouseLeave={(e) => (e.currentTarget.style.color = "var(--gold-dim)")}
               >
                 {isGenerating ? "Regenerating…" : "↺ Regenerate"}
               </button>
@@ -277,14 +277,14 @@ export function DetailPanel({
               disabled={isGenerating}
               className="w-full py-2.5 text-xs tracking-[0.15em] uppercase rounded transition-all"
               style={{
-                border: "1px solid #7A6535",
-                color: isGenerating ? "#7A6535" : "#C8A96E",
+                border: "1px solid var(--gold-dim)",
+                color: isGenerating ? "var(--gold-dim)" : "var(--gold)",
                 cursor: isGenerating ? "not-allowed" : "pointer",
                 backgroundColor: "transparent",
               }}
               onMouseEnter={(e) => {
                 if (!isGenerating) {
-                  e.currentTarget.style.backgroundColor = "rgba(200,169,110,0.05)";
+                  e.currentTarget.style.backgroundColor = "var(--gold-bg)";
                 }
               }}
               onMouseLeave={(e) => {

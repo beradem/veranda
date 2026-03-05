@@ -94,7 +94,7 @@ export default function DashboardPage() {
   const showDetailPanel = !!selectedLead;
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ backgroundColor: "#0C0C0F" }}>
+    <div className="flex h-screen overflow-hidden" style={{ backgroundColor: "var(--bg)" }}>
       {/* Sidebar */}
       <Sidebar onSearch={handleSearch} onReset={handleReset} isLoading={isLoading} />
 

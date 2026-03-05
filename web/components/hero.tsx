@@ -14,7 +14,7 @@ export function Hero() {
           className="text-6xl font-normal tracking-[0.15em] uppercase"
           style={{
             fontFamily: "'Playfair Display', Georgia, serif",
-            color: "#EDE8E0",
+            color: "var(--text)",
           }}
         >
           Veranda
@@ -22,7 +22,7 @@ export function Hero() {
         <div className="gold-rule my-4 w-48 mx-auto" />
         <p
           className="text-xs tracking-[0.3em] uppercase"
-          style={{ color: "#7A7570" }}
+          style={{ color: "var(--text-dim)" }}
         >
           NYC Intelligence Platform
         </p>
@@ -51,13 +51,13 @@ export function Hero() {
             key={step}
             className="p-5 rounded border text-left"
             style={{
-              backgroundColor: "#111115",
-              borderColor: "#252530",
+              backgroundColor: "var(--surface)",
+              borderColor: "var(--border)",
             }}
           >
             <div
               className="text-xs font-semibold tracking-[0.2em] mb-3"
-              style={{ color: "#C8A96E" }}
+              style={{ color: "var(--gold)" }}
             >
               {step}
             </div>
@@ -65,12 +65,12 @@ export function Hero() {
               className="text-sm font-medium mb-2"
               style={{
                 fontFamily: "'Playfair Display', Georgia, serif",
-                color: "#EDE8E0",
+                color: "var(--text)",
               }}
             >
               {label}
             </div>
-            <div className="text-xs leading-relaxed" style={{ color: "#7A7570" }}>
+            <div className="text-xs leading-relaxed" style={{ color: "var(--text-dim)" }}>
               {desc}
             </div>
           </div>
