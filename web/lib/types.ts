@@ -67,3 +67,18 @@ export interface LeadsResponse {
 export interface OutreachResponse {
   draft: string;
 }
+
+export interface UserProfile {
+  id: string;
+  service_description: string;
+  updated_at: string;
+}
+
+export interface SavedSearch {
+  id: string;
+  user_id: string;
+  service_description: string;
+  neighborhoods: string[]; // neighborhood display names
+  result_count: number;
+  created_at: string;
+}
