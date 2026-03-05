@@ -16,12 +16,7 @@ export default function LoginPage() {
     setIsLoading(true);
     setError(null);
 
-    console.log("[login] supabase url:", process.env.NEXT_PUBLIC_SUPABASE_URL);
-    console.log("[login] anon key set:", !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-
     const supabase = getBrowserClient();
-    console.log("[login] calling signInWithOAuth...");
-
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
@@ -30,15 +25,12 @@ export default function LoginPage() {
       },
     });
 
-    console.log("[login] result:", { url: data?.url, error });
-
     if (error || !data?.url) {
       setError("Something went wrong. Please try again.");
       setIsLoading(false);
       return;
     }
 
-    console.log("[login] redirecting to:", data.url);
     window.location.href = data.url;
   };
 
