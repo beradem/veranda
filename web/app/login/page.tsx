@@ -17,18 +17,22 @@ export default function LoginPage() {
     setError(null);
 
     const supabase = getBrowserClient();
-    const { error } = await supabase.auth.signInWithOAuth({
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
+        skipBrowserRedirect: true,
       },
     });
 
-    if (error) {
+    if (error || !data.url) {
       setError("Something went wrong. Please try again.");
       setIsLoading(false);
+      return;
     }
-    // On success, browser navigates to Google — no further action needed here
+
+    // Explicitly navigate — @supabase/ssr does not auto-redirect
+    window.location.href = data.url;
   };
 
   return (
