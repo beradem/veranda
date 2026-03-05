@@ -13,10 +13,11 @@ const ALL_NEIGHBORHOODS = Object.keys(NEIGHBORHOOD_ZIP_CODES);
 
 interface SidebarProps {
   onSearch: (params: { serviceDescription: string; zipCodes: string[] }) => void;
+  onReset: () => void;
   isLoading: boolean;
 }
 
-export function Sidebar({ onSearch, isLoading }: SidebarProps) {
+export function Sidebar({ onSearch, onReset, isLoading }: SidebarProps) {
   const [stats, setStats] = useState<StatsResponse>({ leadCount: 0, lastSync: null });
   const [serviceDescription, setServiceDescription] = useState("");
   const [selectedNeighborhoods, setSelectedNeighborhoods] = useState<Set<string>>(
@@ -44,13 +45,15 @@ export function Sidebar({ onSearch, isLoading }: SidebarProps) {
   }, []);
 
   const toggleNeighborhood = useCallback((name: string) => {
-    setSelectedNeighborhoods((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
-    });
-  }, []);
+    const next = new Set(selectedNeighborhoods);
+    if (next.has(name)) next.delete(name);
+    else next.add(name);
+    setSelectedNeighborhoods(next);
+    const zipCodes = [...new Set(
+      Array.from(next).flatMap((n) => NEIGHBORHOOD_ZIP_CODES[n] ?? [])
+    )];
+    onSearch({ serviceDescription, zipCodes });
+  }, [selectedNeighborhoods, serviceDescription, onSearch]);
 
   const selectAll = () => setSelectedNeighborhoods(new Set(ALL_NEIGHBORHOODS));
   const clearAll = () => setSelectedNeighborhoods(new Set());
@@ -78,12 +81,15 @@ export function Sidebar({ onSearch, isLoading }: SidebarProps) {
     >
       {/* Brand */}
       <div className="px-6 pt-6 pb-4" style={{ borderBottom: "1px solid #252530" }}>
-        <div
-          className="text-2xl tracking-[0.2em] uppercase font-normal"
-          style={{ fontFamily: "'Playfair Display', Georgia, serif", color: "#EDE8E0" }}
+        <button
+          onClick={onReset}
+          className="text-2xl tracking-[0.2em] uppercase font-normal text-left transition-colors"
+          style={{ fontFamily: "'Playfair Display', Georgia, serif", color: "#EDE8E0", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = "#C8A96E")}
+          onMouseLeave={(e) => (e.currentTarget.style.color = "#EDE8E0")}
         >
           Veranda
-        </div>
+        </button>
         <div
           className="text-[10px] tracking-[0.25em] uppercase mt-1"
           style={{ color: "#7A7570" }}

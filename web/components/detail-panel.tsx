@@ -82,20 +82,7 @@ export function DetailPanel({
   };
 
   if (!lead) {
-    return (
-      <div
-        className="fixed right-0 top-0 h-screen w-80 flex items-center justify-center"
-        style={{
-          width: "22rem",
-          backgroundColor: "#111115",
-          borderLeft: "1px solid #252530",
-        }}
-      >
-        <span className="text-xs" style={{ color: "#4A4845" }}>
-          Select a lead to view details
-        </span>
-      </div>
-    );
+    return null;
   }
 
   const neighborhood = zipToNeighborhood(lead.zip_code);

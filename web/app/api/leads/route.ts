@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from("leads")
       .select("*", { count: "exact" })
+      .or("estimated_wealth.is.null,estimated_wealth.lte.70000000")
       .order("estimated_wealth", { ascending: false, nullsFirst: false });
 
     // Neighborhood filter (zip codes)

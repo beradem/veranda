@@ -14,7 +14,7 @@ import { DetailPanel } from "@/components/detail-panel";
 import { Hero } from "@/components/hero";
 import type { Lead, LeadsResponse } from "@/lib/types";
 
-const PAGE_SIZE = 100;
+const PAGE_SIZE = 50;
 
 export default function DashboardPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -75,6 +75,14 @@ export default function DashboardPage() {
     [currentSearch, fetchLeads]
   );
 
+  const handleReset = useCallback(() => {
+    setHasSearched(false);
+    setSelectedLead(null);
+    setLeads([]);
+    setTotal(0);
+    setCurrentSearch(null);
+  }, []);
+
   // When outreach is generated, update the lead in the local list
   const handleOutreachGenerated = useCallback((updatedLead: Lead) => {
     setLeads((prev) =>
@@ -88,7 +96,7 @@ export default function DashboardPage() {
   return (
     <div className="flex h-screen overflow-hidden" style={{ backgroundColor: "#0C0C0F" }}>
       {/* Sidebar */}
-      <Sidebar onSearch={handleSearch} isLoading={isLoading} />
+      <Sidebar onSearch={handleSearch} onReset={handleReset} isLoading={isLoading} />
 
       {/* Main content area — offset by sidebar width */}
       <main

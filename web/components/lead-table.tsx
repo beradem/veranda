@@ -17,12 +17,7 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 import type { Lead } from "@/lib/types";
-import {
-  formatCurrency,
-  leadSubtitle,
-  sourceLabel,
-  sourceBadgeColor,
-} from "@/lib/utils";
+import { leadSubtitle } from "@/lib/utils";
 import { zipToNeighborhood } from "@/lib/neighborhoods";
 
 interface LeadTableProps {
@@ -74,60 +69,6 @@ export function LeadTable({
             {getValue() as string}
           </span>
         ),
-        enableGlobalFilter: false,
-      },
-      {
-        id: "source",
-        header: "Source",
-        accessorKey: "source",
-        cell: ({ getValue }) => {
-          const src = getValue() as Lead["source"];
-          return (
-            <span
-              className={`text-[10px] tracking-[0.1em] uppercase px-2 py-0.5 rounded border ${sourceBadgeColor(src)}`}
-            >
-              {sourceLabel(src)}
-            </span>
-          );
-        },
-        enableGlobalFilter: false,
-      },
-      {
-        id: "wealth",
-        header: "Est. Value",
-        accessorKey: "estimated_wealth",
-        cell: ({ getValue }) => (
-          <span className="text-xs font-medium" style={{ color: "#C8A96E" }}>
-            {formatCurrency(getValue() as number | null)}
-          </span>
-        ),
-        sortingFn: "basic",
-        enableGlobalFilter: false,
-      },
-      {
-        id: "status",
-        header: "Outreach",
-        accessorKey: "outreach_status",
-        cell: ({ getValue }) => {
-          const status = getValue() as Lead["outreach_status"];
-          const label =
-            status === "pending"
-              ? "—"
-              : status === "draft_ready"
-              ? "Draft"
-              : status.charAt(0).toUpperCase() + status.slice(1);
-          const color =
-            status === "pending"
-              ? "#4A4845"
-              : status === "draft_ready"
-              ? "#7A6535"
-              : "#C8A96E";
-          return (
-            <span className="text-xs" style={{ color }}>
-              {label}
-            </span>
-          );
-        },
         enableGlobalFilter: false,
       },
     ],
