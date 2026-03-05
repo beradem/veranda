@@ -25,15 +25,15 @@ export function Sidebar({ onSearch, onReset, isLoading }: SidebarProps) {
   );
   const [neighborhoodSearch, setNeighborhoodSearch] = useState("");
 
-  // Restore from localStorage
+  // Restore from sessionStorage (tab-specific — clears when tab closes)
   useEffect(() => {
-    const saved = localStorage.getItem("veranda_service_desc");
+    const saved = sessionStorage.getItem("veranda_service_desc");
     if (saved) setServiceDescription(saved);
   }, []);
 
-  // Persist to localStorage
+  // Persist to sessionStorage
   useEffect(() => {
-    localStorage.setItem("veranda_service_desc", serviceDescription);
+    sessionStorage.setItem("veranda_service_desc", serviceDescription);
   }, [serviceDescription]);
 
   // Fetch stats on mount
@@ -45,15 +45,13 @@ export function Sidebar({ onSearch, onReset, isLoading }: SidebarProps) {
   }, []);
 
   const toggleNeighborhood = useCallback((name: string) => {
-    const next = new Set(selectedNeighborhoods);
-    if (next.has(name)) next.delete(name);
-    else next.add(name);
-    setSelectedNeighborhoods(next);
-    const zipCodes = [...new Set(
-      Array.from(next).flatMap((n) => NEIGHBORHOOD_ZIP_CODES[n] ?? [])
-    )];
-    onSearch({ serviceDescription, zipCodes });
-  }, [selectedNeighborhoods, serviceDescription, onSearch]);
+    setSelectedNeighborhoods((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }, []);
 
   const selectAll = () => setSelectedNeighborhoods(new Set(ALL_NEIGHBORHOODS));
   const clearAll = () => setSelectedNeighborhoods(new Set());

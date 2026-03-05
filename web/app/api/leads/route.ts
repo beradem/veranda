@@ -32,11 +32,15 @@ export async function GET(request: NextRequest) {
       .or("estimated_wealth.is.null,estimated_wealth.lte.70000000")
       .order("estimated_wealth", { ascending: false, nullsFirst: false });
 
-    // Neighborhood filter (zip codes)
+    // Neighborhood filter — matches zip_code column OR zip embedded in address string.
+    // Many records have NULL zip_code but the zip appears in the address field
+    // (e.g. "123 SPRING ST, NEW YORK NY 10012"), so we check both.
     if (neighborhoods) {
       const zips = neighborhoods.split(",").map((z) => z.trim()).filter(Boolean);
       if (zips.length > 0) {
-        query = query.in("zip_code", zips);
+        const zipColConditions = zips.map((z) => `zip_code.eq.${z}`).join(",");
+        const addressConditions = zips.map((z) => `address.ilike.%${z}%`).join(",");
+        query = query.or(`${zipColConditions},${addressConditions}`);
       }
     }
 
