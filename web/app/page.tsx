@@ -14,7 +14,7 @@ import { DetailPanel } from "@/components/detail-panel";
 import { Hero } from "@/components/hero";
 import type { Lead, LeadsResponse } from "@/lib/types";
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 100;
 
 export default function DashboardPage() {
   const [leads, setLeads] = useState<Lead[]>([]);

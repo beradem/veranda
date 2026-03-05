@@ -10,7 +10,6 @@ import {
   useReactTable,
   getCoreRowModel,
   getFilteredRowModel,
-  getPaginationRowModel,
   getSortedRowModel,
   flexRender,
   type ColumnDef,
@@ -61,13 +60,18 @@ export function LeadTable({
         enableGlobalFilter: true,
       },
       {
-        id: "neighborhood",
-        header: "Neighborhood",
-        accessorFn: (row) => zipToNeighborhood(row.zip_code),
-        cell: ({ getValue }) => (
-          <span className="text-xs" style={{ color: "#EDE8E0" }}>
-            {getValue() as string}
-          </span>
+        id: "details",
+        header: "Details",
+        accessorFn: (row) => `${row.address ?? ""} ${row.building_type ?? ""}`,
+        cell: ({ row }) => (
+          <div>
+            <div className="text-xs" style={{ color: "#EDE8E0" }}>
+              {zipToNeighborhood(row.original.zip_code)}
+            </div>
+            <div className="text-xs mt-0.5" style={{ color: "#7A7570" }}>
+              {row.original.address ?? ""}
+            </div>
+          </div>
         ),
         enableGlobalFilter: false,
       },
@@ -84,7 +88,6 @@ export function LeadTable({
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
     globalFilterFn: "includesString",
   });
 
