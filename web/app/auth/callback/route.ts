@@ -2,12 +2,12 @@
  * OAuth callback handler.
  *
  * After Google authenticates the user, Supabase redirects here with a
- * one-time `code`. We exchange it for a session, which gets stored in
- * cookies. Then we send the user to the dashboard.
+ * one-time `code`. We exchange it for a session and write the resulting
+ * cookies directly onto the redirect response so the browser receives
+ * them in the same round-trip.
  */
 
 import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
@@ -15,18 +15,21 @@ export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
 
-  if (code) {
-    const cookieStore = await cookies();
+  // Create the redirect response first so we can attach cookies to it
+  const response = NextResponse.redirect(new URL("/", origin));
 
+  if (code) {
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
-          getAll: () => cookieStore.getAll(),
+          // Read from the incoming request
+          getAll: () => request.cookies.getAll(),
+          // Write onto the outgoing redirect response
           setAll: (cookiesToSet) => {
             cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
+              response.cookies.set(name, value, options)
             );
           },
         },
@@ -36,5 +39,5 @@ export async function GET(request: NextRequest) {
     await supabase.auth.exchangeCodeForSession(code);
   }
 
-  return NextResponse.redirect(new URL("/", origin));
+  return response;
 }
