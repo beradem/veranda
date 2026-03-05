@@ -23,6 +23,16 @@ export async function GET() {
   return Response.json({ searches: data ?? [] });
 }
 
+export async function DELETE() {
+  const user = await getUser();
+  if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+  const db = getSupabaseClient();
+  await db.from("saved_searches").delete().eq("user_id", user.id);
+
+  return Response.json({ ok: true });
+}
+
 export async function POST(request: Request) {
   const user = await getUser();
   if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });

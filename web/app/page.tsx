@@ -94,7 +94,8 @@ export default function DashboardPage() {
   const fetchLeads = useCallback(
     async (
       params: { serviceDescription: string; zipCodes: string[]; neighborhoods: string[] },
-      targetPage = 1
+      targetPage = 1,
+      saveToHistory = true
     ) => {
       setIsLoading(true);
       try {
@@ -114,8 +115,8 @@ export default function DashboardPage() {
         setHasSearched(true);
         setSelectedLead(null);
 
-        // Save to search history (only on page 1 = new search)
-        if (targetPage === 1) {
+        // Save to search history (only on page 1 = new search, not when restoring)
+        if (targetPage === 1 && saveToHistory) {
           fetch("/api/searches", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -171,6 +172,11 @@ export default function DashboardPage() {
     setSelectedLead(updatedLead);
   }, []);
 
+  const handleClearSearches = useCallback(() => {
+    fetch("/api/searches", { method: "DELETE" }).catch(console.error);
+    setSavedSearches([]);
+  }, []);
+
   // Restore a past search: set sidebar state + immediately run the search
   const handleRestoreSearch = useCallback(
     (search: SavedSearch) => {
@@ -192,7 +198,7 @@ export default function DashboardPage() {
         neighborhoods: search.neighborhoods,
       };
       setCurrentSearch(params);
-      fetchLeads(params, 1);
+      fetchLeads(params, 1, false);
     },
     [fetchLeads]
   );
@@ -212,6 +218,7 @@ export default function DashboardPage() {
         userEmail={userEmail}
         savedSearches={savedSearches}
         onRestoreSearch={handleRestoreSearch}
+        onClearSearches={handleClearSearches}
       />
 
       <main

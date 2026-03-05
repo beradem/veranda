@@ -59,6 +59,7 @@ interface SidebarProps {
   // Past searches
   savedSearches: SavedSearch[];
   onRestoreSearch: (search: SavedSearch) => void;
+  onClearSearches: () => void;
 }
 
 export function Sidebar({
@@ -72,6 +73,7 @@ export function Sidebar({
   userEmail,
   savedSearches,
   onRestoreSearch,
+  onClearSearches,
 }: SidebarProps) {
   const [stats, setStats] = useState<StatsResponse>({ leadCount: 0, lastSync: null });
   const [neighborhoodSearch, setNeighborhoodSearch] = useState("");
@@ -308,18 +310,29 @@ export function Sidebar({
           className="px-6 py-3"
           style={{ borderTop: "1px solid var(--border)", maxHeight: "220px", overflowY: "auto" }}
         >
-          <button
-            className="flex items-center justify-between w-full mb-2"
-            onClick={() => setShowHistory((v) => !v)}
-            style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
-          >
-            <span className="text-[10px] tracking-[0.2em] uppercase" style={{ color: "var(--text-dim)" }}>
-              Recent Searches
-            </span>
-            <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>
-              {showHistory ? "▲" : "▼"}
-            </span>
-          </button>
+          <div className="flex items-center justify-between mb-2">
+            <button
+              className="flex items-center gap-2"
+              onClick={() => setShowHistory((v) => !v)}
+              style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
+            >
+              <span className="text-[10px] tracking-[0.2em] uppercase" style={{ color: "var(--text-dim)" }}>
+                Recent Searches
+              </span>
+              <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+                {showHistory ? "▲" : "▼"}
+              </span>
+            </button>
+            <button
+              onClick={onClearSearches}
+              className="text-[9px] tracking-[0.1em] uppercase transition-colors"
+              style={{ color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "var(--text-dim)")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "var(--text-muted)")}
+            >
+              Clear
+            </button>
+          </div>
 
           {showHistory && (
             <div className="space-y-1">
