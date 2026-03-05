@@ -20,6 +20,7 @@ import { LeadTable } from "@/components/lead-table";
 import { DetailPanel } from "@/components/detail-panel";
 import { Hero } from "@/components/hero";
 import { getBrowserClient } from "@/lib/supabase-browser";
+import { ThemeToggle } from "@/components/theme-toggle";
 import type { Lead, LeadsResponse, SavedSearch } from "@/lib/types";
 
 const PAGE_SIZE = 100;
@@ -244,6 +245,8 @@ export default function DashboardPage() {
           />
         )}
       </main>
+
+      <ThemeToggle elevated={hasSearched} />
 
       <DetailPanel
         lead={selectedLead}

@@ -7,7 +7,11 @@
 
 import { useEffect, useState } from "react";
 
-export function ThemeToggle() {
+interface ThemeToggleProps {
+  elevated?: boolean;
+}
+
+export function ThemeToggle({ elevated = false }: ThemeToggleProps) {
   const [isDark, setIsDark] = useState(true);
 
   useEffect(() => {
@@ -33,8 +37,10 @@ export function ThemeToggle() {
     <button
       onClick={toggle}
       title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-      className="fixed bottom-20 right-6 z-50 w-9 h-9 rounded-full flex items-center justify-center transition-all"
+      className="fixed right-6 z-50 w-9 h-9 rounded-full flex items-center justify-center"
       style={{
+        bottom: elevated ? "80px" : "24px",
+        transition: "bottom 0.2s ease",
         backgroundColor: "var(--card)",
         border: "1px solid var(--border)",
         color: "var(--text-dim)",

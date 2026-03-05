@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Playfair_Display } from "next/font/google";
 import "./globals.css";
-import { ThemeToggle } from "@/components/theme-toggle";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -37,7 +36,6 @@ export default function RootLayout({
       </head>
       <body>
         {children}
-        <ThemeToggle />
       </body>
     </html>
   );
