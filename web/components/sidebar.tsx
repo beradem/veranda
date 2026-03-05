@@ -25,17 +25,6 @@ export function Sidebar({ onSearch, onReset, isLoading }: SidebarProps) {
   );
   const [neighborhoodSearch, setNeighborhoodSearch] = useState("");
 
-  // Restore from sessionStorage (tab-specific — clears when tab closes)
-  useEffect(() => {
-    const saved = sessionStorage.getItem("veranda_service_desc");
-    if (saved) setServiceDescription(saved);
-  }, []);
-
-  // Persist to sessionStorage
-  useEffect(() => {
-    sessionStorage.setItem("veranda_service_desc", serviceDescription);
-  }, [serviceDescription]);
-
   // Fetch stats on mount
   useEffect(() => {
     fetch("/api/stats")
