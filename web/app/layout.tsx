@@ -16,7 +16,7 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: "Veranda — NYC Intelligence Platform",
+  title: "Veranda — NYC Home Services Leads",
   description: "AI-driven lead generation for luxury services",
 };
 

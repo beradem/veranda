@@ -75,7 +75,7 @@ export default function LoginPage() {
           className="text-[10px] tracking-[0.25em] uppercase mb-8"
           style={{ color: "var(--text-dim)" }}
         >
-          NYC Intelligence Platform
+          NYC Home Services Leads
         </p>
 
         <div className="gold-rule w-32 mb-8" />

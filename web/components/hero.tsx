@@ -24,7 +24,7 @@ export function Hero() {
           className="text-xs tracking-[0.3em] uppercase"
           style={{ color: "var(--text-dim)" }}
         >
-          NYC Intelligence Platform
+          NYC Home Services Leads
         </p>
       </div>
 

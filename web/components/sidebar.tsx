@@ -173,7 +173,7 @@ export function Sidebar({
         </div>
 
         <div className="text-[10px] tracking-[0.25em] uppercase" style={{ color: "var(--text-dim)" }}>
-          NYC Intelligence Platform
+          NYC Home Services Leads
         </div>
 
         {/* Stats row */}
