@@ -89,12 +89,14 @@ def main() -> None:
             logger.info("No leads in SQLite to migrate.")
         else:
             cols = ", ".join(LEAD_COLUMNS)
-            placeholders = ", ".join("%s" for _ in LEAD_COLUMNS)
-            insert = f"INSERT INTO leads ({cols}) VALUES ({placeholders})"
+            insert = f"INSERT INTO leads ({cols}) VALUES %s"
+            data = [[row[c] for c in LEAD_COLUMNS] for row in rows]
+            BATCH = 1000
             cur = pg_conn.cursor()
-            for row in rows:
-                cur.execute(insert, [row[c] for c in LEAD_COLUMNS])
-            pg_conn.commit()
+            for i in range(0, len(data), BATCH):
+                psycopg2.extras.execute_values(cur, insert, data[i:i + BATCH])
+                pg_conn.commit()
+                logger.info("  ...inserted %d / %d leads", min(i + BATCH, len(data)), len(data))
             cur.close()
             logger.info("Migrated %d leads to PostgreSQL.", len(rows))
 

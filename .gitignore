@@ -38,3 +38,4 @@ data/*.db-journal
 data/*.db-wal
 data/*.db-shm
 data/sync.log
+web/.env.local
