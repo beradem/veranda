@@ -249,6 +249,8 @@ export default function DashboardPage() {
       <ThemeToggle elevated={hasSearched} />
 
       <DetailPanel
+        // Remount per lead so drafts/contact state never leak between people
+        key={selectedLead?.name_key ?? "none"}
         lead={selectedLead}
         serviceDescription={serviceDescription}
         onClose={() => setSelectedLead(null)}
