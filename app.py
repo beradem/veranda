@@ -520,6 +520,51 @@ with st.sidebar:
         ]
     st.session_state["_f_nbhds"] = _sel_nbhds
 
+    st.markdown("<div style='height:1.25rem;'></div>", unsafe_allow_html=True)
+    st.markdown('<div class="section-label">LLC Owners</div>', unsafe_allow_html=True)
+    show_llc_owners = st.toggle("Show LLC & trust owner table", key="show_llc_owners")
+
+
+# ─── LLC OWNERS TABLE ─────────────────────────────────────────────────────────
+LLC_OWNERS_CSV = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output", "llc_owners.csv")
+
+if show_llc_owners:
+    import pandas as pd
+
+    st.subheader("LLC- & trust-owned homes → the people behind them")
+    if not os.path.exists(LLC_OWNERS_CSV):
+        st.info("No data yet. Run: python3 scripts/resolve_llc_owners.py")
+        st.stop()
+
+    llc_df = pd.read_csv(LLC_OWNERS_CSV)
+    _f1, _f2, _f3, _f4 = st.columns(4)
+    _conf = _f1.multiselect("Confidence", ["High", "Medium", "Unresolved"], default=["High", "Medium"])
+    _types = _f2.multiselect(
+        "Owner type", sorted(llc_df["owner_type"].dropna().unique()), default=["Private homeowner", "Investor"]
+    )
+    _entity_types = _f3.multiselect("Entity", ["LLC", "Trust"], default=["LLC", "Trust"])
+    _min_value = _f4.number_input("Min. total value ($)", value=2_000_000, step=500_000)
+    filtered = llc_df[
+        llc_df["confidence"].isin(_conf)
+        & (llc_df["owner_type"].isin(_types) | llc_df["owner_type"].isna())
+        & llc_df["entity_type"].isin(_entity_types)
+        & (llc_df["person_total_value"] >= _min_value)
+    ]
+    st.caption(f"{len(filtered):,} of {len(llc_df):,} LLCs/trusts")
+    st.dataframe(
+        filtered,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "entity_portfolio_value": st.column_config.NumberColumn("Entity portfolio value", format="$%d"),
+            "person_total_value": st.column_config.NumberColumn("Person total value", format="$%d"),
+            "home_value": st.column_config.NumberColumn("Home value", format="$%d"),
+            "linkedin_search": st.column_config.LinkColumn("LinkedIn search", display_text="Search →"),
+            "linkedin_url": st.column_config.LinkColumn("LinkedIn (Minerva)"),
+        },
+    )
+    st.stop()
+
 
 # ─── GENERATE LEADS ───────────────────────────────────────────────────────────
 if generate_btn:
