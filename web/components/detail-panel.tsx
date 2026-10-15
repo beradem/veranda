@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * DetailPanel — Fixed right panel showing lead details, wealth signals,
- * and outreach generation. Slides in when a lead is selected.
+ * DetailPanel — Fixed right panel showing lead details, contact info,
+ * wealth signals, and outreach generation. Slides in when a lead is selected.
  */
 
 import { useState } from "react";
@@ -18,6 +18,7 @@ import {
   mapsUrl,
 } from "@/lib/utils";
 import { zipToNeighborhood } from "@/lib/neighborhoods";
+import { ContactSection } from "@/components/contact-section";
 
 interface DetailPanelProps {
   lead: Lead | null;
@@ -181,19 +182,8 @@ export function DetailPanel({
           </section>
         )}
 
-        {/* Contact */}
-        {(lead.email || lead.phone) && (
-          <section className="mb-6">
-            <div
-              className="text-[10px] tracking-[0.2em] uppercase mb-3"
-              style={{ color: "var(--text-dim)" }}
-            >
-              Contact
-            </div>
-            <DataRow label="Email" value={lead.email} />
-            <DataRow label="Phone" value={lead.phone} />
-          </section>
-        )}
+        {/* Contact — looked up automatically when the panel opens */}
+        <ContactSection lead={lead} />
 
         {/* Search links */}
         <section className="mb-6">

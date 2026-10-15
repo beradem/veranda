@@ -82,3 +82,27 @@ export interface SavedSearch {
   result_count: number;
   created_at: string;
 }
+
+/** Contact card returned by Minerva enrichment (see lib/minerva.ts). */
+export interface ContactDetails {
+  phones: { number: string; type: string | null }[];
+  emails: { address: string; kind: "personal" | "work" }[];
+  linkedin_url: string | null;
+  linkedin_title: string | null;
+  linkedin_industry: string | null;
+  match_score: number | null;
+}
+
+/**
+ * POST /api/leads/[nameKey]/enrich
+ *  - "found":       Minerva matched the person; `contact` is filled in
+ *  - "not_found":   Minerva had no confident match
+ *  - "unavailable": lead can't be looked up (company owner, no address)
+ */
+export interface EnrichResponse {
+  status: "found" | "not_found" | "unavailable";
+  contact: ContactDetails | null;
+  reason?: string;
+  cached: boolean;
+  enrichedAt: string | null;
+}
