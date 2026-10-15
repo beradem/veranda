@@ -6,6 +6,9 @@ httpx>=0.27,<1.0
 # Database (PostgreSQL for Supabase; SQLite used when DATABASE_URL is unset)
 psycopg2-binary>=2.9,<3.0
 
+# SEC EDGAR (Form 4 insider sales)
+edgartools>=4.6,<5.0
+
 # NYC Open Data (PLUTO real estate)
 sodapy>=2.2,<3.0
 
